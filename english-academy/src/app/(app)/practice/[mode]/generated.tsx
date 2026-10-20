@@ -1,0 +1,115 @@
+"use client";
+
+import { Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { SessionRunner } from "@/components/learn/session-runner";
+import type { RunnerCard } from "@/components/learn/types";
+import { TopicSelect, type TopicNode } from "@/components/vocab/topic-select";
+import { Badge, Button, Card, Field, LinkButton, Notice, PageHeader } from "@/components/ui";
+import type { Exercise } from "@/domain/learning/exercises";
+import type { PracticeMode } from "@/domain/learning/modes";
+import { shuffle, rng, hashString } from "@/domain/learning/exercises";
+import { api, errorMessage } from "@/lib/api";
+
+type Item = { targetWord: string | null; entryId: string | null; prompt: string; context: string | null; options: string[]; answer: string; acceptableAnswers: string[]; explanation: string };
+type Entry = { id: string; headword: string; translationDe: string | null; definitionEn: string | null };
+
+function toCard(item: Item, kind: NonNullable<PracticeMode["ai"]>, entryFallback: Entry, i: number): RunnerCard {
+  const entryId = item.entryId ?? entryFallback.id;
+  const reveal = { headword: item.targetWord ?? entryFallback.headword, translationDe: null, definitionEn: null, example: null, note: item.explanation };
+  const base = { id: `gen-${i}`, entryId, recognitionOnly: false, reveal, hint: undefined };
+  let exercise: Exercise;
+  if (kind === "context_choice") {
+    const options = shuffle(item.options.length ? item.options : [item.answer], rng(hashString(item.prompt)));
+    exercise = { ...base, kind: "nuance", dimension: "context", title: "Contextual word choice", prompt: item.prompt, context: item.context ?? undefined, answer: { type: "choice", options, correct: Math.max(0, options.indexOf(item.answer)) }, explanation: item.explanation, recognitionOnly: true };
+  } else if (kind === "cloze_contexts") {
+    exercise = { ...base, kind: "cloze", dimension: "context", title: "New context", prompt: item.prompt, context: item.context ?? undefined, answer: { type: "typed", spec: { expected: [item.answer, ...item.acceptableAnswers], formSensitive: true } } };
+  } else {
+    const titles = { translation: "Translate into English", transformation: "Transform the sentence", error_correction: "Correct the error" } as const;
+    exercise = { ...base, kind: "production", dimension: kind === "translation" ? "production" : kind === "error_correction" ? "grammar" : "production", title: titles[kind], prompt: item.prompt, context: item.context ?? undefined, answer: { type: "free", targetWord: item.targetWord ?? entryFallback.headword } };
+  }
+  return { exercise, reason: "generated", schedule: false, intervals: null, ai: kind === "context_choice" || kind === "cloze_contexts" ? undefined : { task: kind, reference: [item.answer, ...item.acceptableAnswers] } };
+}
+
+export function GeneratedPractice({ mode }: { mode: PracticeMode }) {
+  const [topics, setTopics] = useState<TopicNode[]>([]);
+  const [topic, setTopic] = useState("");
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [cards, setCards] = useState<RunnerCard[] | null>(null);
+  const [demo, setDemo] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ topics: TopicNode[] }>("/api/topics").then((r) => setTopics(r.topics)).catch(() => {});
+  }, []);
+  useEffect(() => {
+    api<{ items: Entry[] }>(`/api/vocab?limit=60${topic ? `&topic=${topic}` : "&list=recent"}`).then((r) => {
+      setEntries(r.items);
+      setPicked(new Set(r.items.slice(0, 6).map((e) => e.id)));
+    }).catch(() => {});
+  }, [topic]);
+
+  const topicName = useMemo(() => {
+    const find = (ns: TopicNode[]): string | null => ns.reduce<string | null>((acc, n) => acc ?? (n.id === topic ? n.name : find(n.children)), null);
+    return find(topics);
+  }, [topics, topic]);
+
+  const generate = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const ids = [...picked].slice(0, 12);
+      const r = await api<{ items: Item[]; meta: { demo: boolean } }>("/api/practice/generate", { method: "POST", json: { kind: mode.ai, entryIds: ids, topic: topicName, count: Math.min(8, Math.max(3, ids.length)) } });
+      if (!r.items.length) throw new Error(r.meta.demo ? "Demo mode cannot generate this exercise type. Configure an AI provider in Settings." : "No exercises were generated. Try other words.");
+      const fallback = entries.find((e) => picked.has(e.id))!;
+      setDemo(r.meta.demo);
+      setCards(r.items.map((it, i) => toCard(it, mode.ai!, fallback, i)));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (cards) {
+    return (
+      <>
+        {demo && <div className="mx-auto mb-4 max-w-2xl"><Notice tone="warn">Demo mode: these exercises were built by rules from your saved data, not generated by AI.</Notice></div>}
+        <SessionRunner cards={cards} title={mode.title} sessionMode={mode.slug} topicId={topic || null} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <PageHeader eyebrow="Practice" title={mode.title} subtitle={mode.description} actions={mode.href ? <LinkButton href={mode.href}>Use saved examples instead</LinkButton> : undefined} />
+      <Card className="space-y-4">
+        {error && <Notice tone="danger">{error}</Notice>}
+        <Field label="Topic" htmlFor="topic"><TopicSelect id="topic" topics={topics} value={topic} onChange={setTopic} placeholder="Recently added words" /></Field>
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium text-ink-2">Words to practise ({picked.size} selected, max 12)</legend>
+          <div className="flex flex-wrap gap-2">
+            {entries.map((e) => (
+              <label key={e.id} className={`cursor-pointer rounded-full border px-3 py-1 text-sm ${picked.has(e.id) ? "border-navy bg-navy/10 text-navy" : "border-line text-ink-2"}`}>
+                <input type="checkbox" className="sr-only" checked={picked.has(e.id)} onChange={() => setPicked((s) => {
+                  const n = new Set(s);
+                  if (n.has(e.id)) n.delete(e.id);
+                  else if (n.size < 12) n.add(e.id);
+                  return n;
+                })} />
+                {e.headword}
+              </label>
+            ))}
+            {!entries.length && <p className="text-sm text-ink-3">No words in this selection.</p>}
+          </div>
+        </fieldset>
+        <div className="flex items-center justify-between gap-2">
+          <Badge tone="accent"><Sparkles className="size-3" aria-hidden /> Exercises are generated for you; answers are judged with your exact wording.</Badge>
+          <Button variant="primary" onClick={generate} loading={busy} disabled={!picked.size}>Generate exercises</Button>
+        </div>
+      </Card>
+    </>
+  );
+}

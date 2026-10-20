@@ -1,0 +1,52 @@
+{
+  "name": "english-academy",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "next build && playwright test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node scripts/migrate.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@electric-sql/pglite": "^0.5.10",
+    "@xyflow/react": "^12.12.0",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.4",
+    "fflate": "^0.8.3",
+    "lucide-react": "^1.60.0",
+    "next": "16.3.8",
+    "postgres": "^3.4.9",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "read-excel-file": "^9.3.12",
+    "server-only": "^0.0.1",
+    "ts-fsrs": "^5.4.2",
+    "unpdf": "^1.9.1",
+    "web-push": "^3.6.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
+    "drizzle-kit": "^0.31.11",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.8",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^5.0.5"
+  }
+}
