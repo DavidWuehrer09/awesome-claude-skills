@@ -65,10 +65,13 @@ export async function exportAccount(db: Db, userId: string) {
     writingErrorPatterns: await by(s.writingErrorPatterns),
     tutorConversations: await by(s.tutorConversations),
     tutorMessages: await by(s.tutorMessages),
-    examMaterials: await by(s.examMaterials),
+    // Original files are left out (they can be large); their extracted text and checksum are included.
+    examMaterials: (await by(s.examMaterials)).map((m) => ({ ...(m as typeof s.examMaterials.$inferSelect), original: undefined })),
     examCourseProfile: await by(s.examProfileEntries),
+    examCourse: await db.select().from(s.examCourse).where(eq(s.examCourse.userId, userId)),
     exams: await by(s.exams),
     examAttempts: await by(s.examAttempts),
+    examAttemptVersions: await by(s.examAttemptVersions),
     examAssessments: await by(s.examAssessments),
   };
 }

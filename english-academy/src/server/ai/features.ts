@@ -4,6 +4,7 @@ import { proposeGroups } from "@/domain/vocab/organize";
 import { parseVocabularyText } from "@/domain/vocab/parse";
 import { inflectionPattern, normalizeHeadword, wordCount } from "@/lib/text";
 import type { ImageInput } from "./anthropic";
+import { examinerFeatures } from "./examiner-features";
 
 /**
  * AI feature contracts. Each feature has a version (stored with every
@@ -208,7 +209,7 @@ export type ChallengeInput = { text: string; annotation: { excerpt: string; expl
 
 // ---------------------------------------------------------------- feature registry
 
-type Feature<I, O extends z.ZodType> = {
+export type Feature<I, O extends z.ZodType> = {
   id: string;
   version: string;
   schema: O;
@@ -359,6 +360,8 @@ Task: the learner challenges or asks about a feedback comment on their writing. 
       throw new Error("demo_unsupported");
     },
   } satisfies Feature<ChallengeInput, typeof challengeOutput>,
+
+  ...examinerFeatures,
 } as const;
 
 export type FeatureId = keyof typeof features;
