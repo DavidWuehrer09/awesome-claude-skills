@@ -51,7 +51,7 @@ function Sources({ view }: { view: StudentExam }) {
         <>
           <h2 className="font-display text-lg">{s.title}</h2>
           {s.citation && <p className="text-xs text-ink-3">{[s.citation.author, s.citation.publication, s.citation.date].filter(Boolean).join(", ")}{s.citation.adapted ? " (adapted)" : ""}</p>}
-          <div className="mt-3 max-h-[70vh] overflow-y-auto pr-1"><SourceText text={s.text} label={s.label} /></div>
+          <div className="mt-3 max-h-[42vh] overflow-y-auto pr-1 lg:max-h-[70vh]"><SourceText text={s.text} label={s.label} /></div>
         </>
       )}
     </Card>

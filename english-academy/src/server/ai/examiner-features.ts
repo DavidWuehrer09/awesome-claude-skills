@@ -214,7 +214,7 @@ function demoExam(i: GenerateInput): Exam {
   const pick = lib.find((l) => bp.topics.some((t) => l.topic.toLowerCase().includes(t.toLowerCase()))) ?? lib[0];
   const source = uploaded
     ? { id: "S1", title: uploaded.filename, kind: "uploaded_material" as const, label: "From your uploaded materials", materialId: uploaded.id, lineNumbered: true, text: uploaded.text, citation: null }
-    : { id: "S1", title: pick.title.replace(/^[^:]+:\s*/, ""), kind: "fictional_practice" as const, label: "Fictional practice text written for this app", materialId: null, lineNumbered: true, text: pick.sourceText!, citation: null };
+    : { id: "S1", title: pick.title.replace(/^[^:]+:\s*/, "").replace(/^\w/, (c) => c.toUpperCase()), kind: "fictional_practice" as const, label: "Fictional practice text written for this app", materialId: null, lineNumbered: true, text: pick.sourceText!, citation: null };
   const words = bp.targetWords ?? 300;
   const all = [
     { type: "summary" as const, operator: "Summarise", instruction: `Summarise the main ideas of the text (S1) in about ${Math.round(words / 2.5)} words.`, len: Math.round(words / 2.5), exp: ["The central situation or claim of the text", "The key supporting points in the order of importance", "Neutral tone, own words, no personal opinion"] },
