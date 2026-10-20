@@ -81,7 +81,22 @@ export function SessionRunner({
     if (ex?.answer.type === "typed") setTimeout(() => inputRef.current?.focus(), 30);
   }, [index, ex]);
 
+  // One answer per card: a double tap or repeated key while the answer is being saved must not
+  // record twice or skip the next card. Released when the next card is shown.
+  const answering = useRef(false);
+  const once = async (fn: () => Promise<void>) => {
+    if (answering.current) return;
+    answering.current = true;
+    try {
+      await fn();
+    } catch (e) {
+      answering.current = false;
+      throw e;
+    }
+  };
+
   const resetCard = () => {
+    answering.current = false;
     setPhase("answer");
     setFlipped(false);
     setTyped("");
@@ -143,10 +158,10 @@ export function SessionRunner({
 
   // ---------------------------------------------------------------- answer handlers
 
-  const rateSelf = async (grade: 1 | 2 | 3 | 4) => {
+  const rateSelf = (grade: 1 | 2 | 3 | 4) => once(async () => {
     await record(grade === 1 ? "wrong" : "correct", { selfRating: grade });
     next();
-  };
+  });
 
   const submitTyped = () => {
     if (!ex || ex.answer.type !== "typed" || phase !== "answer") return;
@@ -155,11 +170,11 @@ export function SessionRunner({
     setPhase("feedback");
   };
 
-  const finishTyped = async (selfRating?: 1 | 2 | 3 | 4) => {
+  const finishTyped = (selfRating?: 1 | 2 | 3 | 4) => once(async () => {
     if (!verdict) return;
     await record(verdictToOutcome(verdict), { selfRating, answer: typed });
     next();
-  };
+  });
 
   const acceptMine = async () => {
     if (!ex) return;
@@ -178,11 +193,11 @@ export function SessionRunner({
     setPhase("feedback");
   };
 
-  const finishChoice = async () => {
+  const finishChoice = () => once(async () => {
     if (!ex || ex.answer.type !== "choice" || choice === null) return;
     await record(choice === ex.answer.correct ? "correct" : "wrong", { answer: ex.answer.options[choice] });
     next();
-  };
+  });
 
   const evaluateFree = async () => {
     if (!ex || ex.answer.type !== "free" || !typed.trim()) return;

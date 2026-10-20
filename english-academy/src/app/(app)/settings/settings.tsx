@@ -17,6 +17,7 @@ type Me = {
   ai: { provider: string; model: string | null; demo: boolean; available: boolean; misconfigured: boolean };
   push: { configured: boolean; publicKey: string | null };
   email: { configured: boolean };
+  allowance: { plan: string; planLabel: string; resetsAt: string; categories: { category: string; label: string; used: number; limit: number | null }[] };
 };
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -190,9 +191,23 @@ export function Settings() {
           <p className="text-sm">
             Provider: <Badge tone={me.ai.available ? (me.ai.demo ? "warn" : "sage") : "neutral"}>{me.ai.available ? (me.ai.demo ? "demo mode" : `${me.ai.provider} · ${me.ai.model}`) : "not configured"}</Badge>
           </p>
-          {me.ai.misconfigured && <Notice tone="warn">AI_PROVIDER is set to anthropic but no API key is configured on the server.</Notice>}
+          {me.ai.misconfigured && <Notice tone="warn">The server&apos;s AI provider is not configured correctly (for example, the API key is missing).</Notice>}
           {me.ai.demo && <Notice>Demo mode produces clearly labelled, rule-based output for trying the app. Real explanations and assessments need an API key on the server.</Notice>}
-          <p className="text-xs text-ink-3">The AI key is configured by whoever runs the server, never in your browser. A consumer Claude or ChatGPT subscription cannot be used by third-party apps; the server needs API access (e.g. an Anthropic API key from the Claude Console).</p>
+          <p className="text-xs text-ink-3">You do not need an AI account or subscription. AI runs on this site&apos;s server with the operator&apos;s API key, which is never sent to your browser. Because every AI request costs the operator money, your plan includes a monthly allowance.</p>
+          {!me.ai.demo && me.ai.available && (
+            <div>
+              <h3 className="text-sm font-medium">Your AI allowance this month <Badge>{me.allowance.planLabel}</Badge></h3>
+              <ul className="mt-2 space-y-2">
+                {me.allowance.categories.map((c) => (
+                  <li key={c.category} className="text-sm">
+                    <div className="flex justify-between gap-2"><span>{c.label}</span><span className="tabular-nums text-ink-2">{c.limit === null ? `${c.used} used · no limit` : `${c.used} of ${c.limit}`}</span></div>
+                    {c.limit !== null && c.limit > 0 && <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-2"><div className={c.used >= c.limit ? "h-full bg-danger" : "h-full bg-navy"} style={{ width: `${Math.min(100, (c.used / c.limit) * 100)}%` }} /></div>}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-ink-3">Resets on {new Date(me.allowance.resetsAt).toLocaleDateString(undefined, { day: "numeric", month: "long" })}. Reviews, flashcards and all non-AI practice are never limited.</p>
+            </div>
+          )}
           <Toggle checked={s.aiEnabled} onChange={(v) => { update("aiEnabled", v); void save({ aiEnabled: v }); }} label="Use AI features" description="Turning this off keeps all your data; review and non-AI practice keep working." />
           <Toggle checked={s.aiProfileConsent} onChange={(v) => { update("aiProfileConsent", v); void save({ aiProfileConsent: v }); }} label="Let the tutor use my learning profile" description="Shares frequently forgotten words and recurring writing weaknesses with the tutor to personalise answers." />
           <Button size="sm" variant="ghost" onClick={() => confirm("Reset recurring error patterns and confidence calibration? Vocabulary and history stay.") && api("/api/account/profile-reset", { method: "POST" }).then(() => toast({ tone: "sage", text: "Learner profile reset" }))}>Reset personalised profile</Button>

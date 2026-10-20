@@ -40,7 +40,7 @@ export async function createUser(db: Db, email: string, password: string, displa
   if (existing.length) throw new HttpError(409, "An account with this email already exists", "exists");
   const [u] = await db
     .insert(users)
-    .values({ email: normalized, passwordHash: await hashPassword(password), displayName: displayName?.trim() || null })
+    .values({ email: normalized, passwordHash: await hashPassword(password), displayName: displayName?.trim() || null, plan: process.env.DEFAULT_PLAN || "free" })
     .returning();
   await db.insert(userSettings).values({ userId: u.id });
   return { id: u.id, email: u.email, displayName: u.displayName };
@@ -96,4 +96,15 @@ export async function requireUser(): Promise<CurrentUser> {
   const u = await getCurrentUser();
   if (!u) throw new HttpError(401, "Please sign in", "unauthenticated");
   return u;
+}
+
+/** Operators are configured by e-mail address (ADMIN_EMAILS, comma-separated); there is no self-service admin role. */
+export function isAdmin(user: { email: string }) {
+  return (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean).includes(user.email.toLowerCase());
+}
+
+export async function requireAdmin() {
+  const user = await requireUser();
+  if (!isAdmin(user)) throw new HttpError(403, "Only operators can see this page", "forbidden");
+  return user;
 }

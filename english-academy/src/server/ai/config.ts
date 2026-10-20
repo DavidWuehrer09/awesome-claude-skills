@@ -1,6 +1,9 @@
 import "server-only";
 
-export type ProviderId = "anthropic" | "demo" | "none";
+export type ProviderId = string; // "demo", "none" or a key of PROVIDERS in provider.ts
+
+/** Environment variable holding each real provider's API key (server-side only). */
+export const PROVIDER_KEYS: Record<string, string> = { anthropic: "ANTHROPIC_API_KEY" };
 
 /**
  * AI configuration (server-side only; never exposed to the browser).
@@ -11,12 +14,13 @@ export type ProviderId = "anthropic" | "demo" | "none";
  * AI_PROVIDER=none       AI features are disabled; everything else works.
  */
 export function aiConfig() {
-  const requested = (process.env.AI_PROVIDER ?? (process.env.ANTHROPIC_API_KEY ? "anthropic" : "demo")) as ProviderId;
-  const provider: ProviderId =
-    requested === "anthropic" && !process.env.ANTHROPIC_API_KEY ? "none" : (["anthropic", "demo", "none"].includes(requested) ? requested : "none");
+  const requested = process.env.AI_PROVIDER || (process.env.ANTHROPIC_API_KEY ? "anthropic" : "demo");
+  const keyVar = PROVIDER_KEYS[requested];
+  const missingKey = !!keyVar && !process.env[keyVar];
+  const provider: ProviderId = requested === "demo" || requested === "none" ? requested : keyVar && !missingKey ? requested : "none";
   return {
     provider,
-    misconfigured: requested === "anthropic" && !process.env.ANTHROPIC_API_KEY,
+    misconfigured: missingKey || (!keyVar && requested !== "demo" && requested !== "none"),
     model: process.env.AI_MODEL || "claude-opus-5-5",
     fastModel: process.env.AI_FAST_MODEL || process.env.AI_MODEL || "claude-opus-5-5",
     timeoutMs: Number(process.env.AI_TIMEOUT_MS ?? 120_000),
@@ -36,8 +40,14 @@ const PRICES: Record<string, [number, number]> = {
   "claude-fable-5-1": [10, 50],
 };
 
+/**
+ * Estimated cost from list prices (no caching or batch discounts; the provider's
+ * invoice is authoritative). AI_PRICE_INPUT_PER_MTOK / AI_PRICE_OUTPUT_PER_MTOK
+ * override the table, e.g. for a model or provider not listed here.
+ */
 export function estimateCost(model: string, inputTokens: number, outputTokens: number): number | null {
-  const p = PRICES[model];
+  const override = [Number(process.env.AI_PRICE_INPUT_PER_MTOK), Number(process.env.AI_PRICE_OUTPUT_PER_MTOK)];
+  const p: [number, number] | undefined = override.every((x) => x > 0) ? (override as [number, number]) : PRICES[model];
   if (!p) return null;
   return Math.round(((inputTokens * p[0] + outputTokens * p[1]) / 1_000_000) * 10000) / 10000;
 }

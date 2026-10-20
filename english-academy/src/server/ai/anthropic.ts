@@ -3,15 +3,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import { aiConfig, FALLBACK_MODELS } from "./config";
+import { AIError } from "./errors";
 
-export class AIError extends Error {
-  constructor(
-    public code: "refused" | "invalid_output" | "rate_limited" | "timeout" | "unavailable" | "auth" | "bad_request" | "disabled" | "quota",
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export { AIError } from "./errors";
 
 let client: Anthropic | null = null;
 function getClient() {

@@ -35,6 +35,8 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   displayName: text("display_name"),
+  /** Usage plan for AI allowances (see src/server/ai/usage.ts); configurable per deployment. */
+  plan: text("plan").notNull().default("free"),
   createdAt: createdAt(),
 });
 
@@ -545,6 +547,7 @@ export const aiRequests = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
     feature: text("feature").notNull(),
+    category: text("category").notNull().default("other"), // allowance category, see src/server/ai/usage.ts
     provider: text("provider").notNull(),
     model: text("model").notNull(),
     promptVersion: text("prompt_version").notNull(),
@@ -556,7 +559,18 @@ export const aiRequests = pgTable(
     errorCode: text("error_code"),
     createdAt: createdAt(),
   },
-  (t) => [index("ai_requests_user_idx").on(t.userId, t.createdAt)],
+  (t) => [index("ai_requests_user_idx").on(t.userId, t.createdAt), index("ai_requests_created_idx").on(t.createdAt)],
+);
+
+/** Fixed-window counters shared by every app instance (rate limiting without Redis). */
+export const rateLimitCounters = pgTable(
+  "rate_limit_counters",
+  {
+    key: text("key").notNull(),
+    windowStart: ts("window_start").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.windowStart] })],
 );
 
 // ---------------------------------------------------------------- My English Examiner (exam simulator)

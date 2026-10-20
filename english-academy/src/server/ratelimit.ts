@@ -1,27 +1,30 @@
 import "server-only";
+import { lt, sql } from "drizzle-orm";
+import type { Db } from "@/db/client";
+import { rateLimitCounters } from "@/db/schema";
 import { HttpError } from "./http";
 
 /**
- * Small in-process token bucket. Good enough for a single instance; for a
- * multi-instance deployment put a shared limiter (e.g. Redis) behind the same
- * interface. AI usage additionally has a daily cap enforced in the database.
+ * Fixed-window rate limiter stored in the database, so the limit holds across
+ * every app instance (serverless functions, several containers). One atomic
+ * upsert per check; old windows are pruned occasionally.
  */
-const buckets = new Map<string, { tokens: number; at: number }>();
-
-export function rateLimit(key: string, capacity: number, refillPerMinute: number) {
+export async function rateLimit(db: Db, key: string, limit: number, windowSeconds: number, message = "Too many requests. Please wait a moment.") {
   const now = Date.now();
-  const b = buckets.get(key) ?? { tokens: capacity, at: now };
-  b.tokens = Math.min(capacity, b.tokens + ((now - b.at) / 60000) * refillPerMinute);
-  b.at = now;
-  if (b.tokens < 1) {
-    buckets.set(key, b);
-    throw new HttpError(429, "Too many requests. Please wait a moment.", "rate_limited");
+  const windowStart = new Date(Math.floor(now / (windowSeconds * 1000)) * windowSeconds * 1000);
+  const [row] = await db.insert(rateLimitCounters).values({ key, windowStart, count: 1 })
+    .onConflictDoUpdate({ target: [rateLimitCounters.key, rateLimitCounters.windowStart], set: { count: sql`${rateLimitCounters.count} + 1` } })
+    .returning({ count: rateLimitCounters.count });
+  if (Math.random() < 0.01) {
+    await db.delete(rateLimitCounters).where(lt(rateLimitCounters.windowStart, new Date(now - 2 * 86400000))).catch(() => undefined);
   }
-  b.tokens -= 1;
-  buckets.set(key, b);
-  if (buckets.size > 10000) buckets.clear();
+  if (row.count > limit) {
+    const retryAfter = Math.ceil((windowStart.getTime() + windowSeconds * 1000 - now) / 1000);
+    throw new HttpError(429, message, "rate_limited", { retryAfterSeconds: retryAfter });
+  }
 }
 
-export function resetRateLimits() {
-  buckets.clear();
+/** Client address for anonymous limits (sign-up, login). Behind a proxy, the first X-Forwarded-For entry. */
+export function clientIp(headers: Headers) {
+  return headers.get("x-forwarded-for")?.split(",")[0]?.trim() || headers.get("x-real-ip") || "local";
 }

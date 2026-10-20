@@ -58,6 +58,8 @@ test.describe("critical journeys", () => {
     await page.goto("/learn/session?mode=mixed&minutes=5");
     await expect(page.getByText(/1 \/ \d+/)).toBeVisible();
     for (let i = 0; i < 4; i++) {
+      // wait until card i+1 is on screen before answering it
+      await expect(page.getByText(new RegExp(`^${i + 1} / \\d+$`))).toBeVisible();
       // answer whatever exercise type is shown
       if (await page.getByRole("button", { name: "Show answer" }).isVisible().catch(() => false)) {
         await page.keyboard.press("Space");

@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import {
-  BookOpen, CloudOff, GraduationCap, House, Layers, LineChart, LogOut, Menu, MessagesSquare, Network, PenLine, RefreshCw, Search, Settings, Target,
+  BookOpen, CloudOff, Gauge, GraduationCap, House, Layers, LineChart, LogOut, Menu, MessagesSquare, Network, PenLine, RefreshCw, Search, Settings, Target,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -70,7 +70,8 @@ function SyncStatus() {
   );
 }
 
-export function AppShell({ children, user }: { children: ReactNode; user: { email: string; displayName: string | null } }) {
+export function AppShell({ children, user, isAdmin = false }: { children: ReactNode; user: { email: string; displayName: string | null }; isAdmin?: boolean }) {
+  const nav = isAdmin ? [...NAV, { href: "/admin", label: "Usage & costs", icon: Gauge }] : NAV;
   const pathname = usePathname();
   const router = useRouter();
   const [more, setMore] = useState(false);
@@ -115,7 +116,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: { emai
             <span className="hidden font-display text-lg text-ink lg:inline">English Academy</span>
           </Link>
           <nav aria-label="Main" className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2 lg:px-3">
-            {NAV.map(({ href, label, icon: Icon }) => (
+            {nav.map(({ href, label, icon: Icon }) => (
               <Link
                 key={href}
                 href={href}
@@ -164,7 +165,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: { emai
       {/* Bottom navigation on phones */}
       <nav aria-label="Main" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur md:hidden">
         <ul className="grid grid-cols-5">
-          {NAV.filter((n) => MOBILE_PRIMARY.includes(n.href)).map(({ href, label, icon: Icon }) => (
+          {nav.filter((n) => MOBILE_PRIMARY.includes(n.href)).map(({ href, label, icon: Icon }) => (
             <li key={href}>
               <Link href={href} aria-current={active(href) ? "page" : undefined} className={clsx("flex flex-col items-center gap-0.5 pt-2 pb-1 text-[11px]", active(href) ? "text-navy" : "text-ink-3")}>
                 <Icon className="size-6" aria-hidden />
@@ -186,7 +187,7 @@ export function AppShell({ children, user }: { children: ReactNode; user: { emai
           <div className="safe-bottom absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-line bg-surface p-4">
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line-strong" />
             <ul className="grid grid-cols-3 gap-2">
-              {NAV.filter((n) => !MOBILE_PRIMARY.includes(n.href)).map(({ href, label, icon: Icon }) => (
+              {nav.filter((n) => !MOBILE_PRIMARY.includes(n.href)).map(({ href, label, icon: Icon }) => (
                 <li key={href}>
                   <Link href={href} onClick={() => setMore(false)} className={clsx("flex flex-col items-center gap-1 rounded-xl px-2 py-3 text-center text-xs", active(href) ? "bg-navy/10 text-navy" : "bg-surface-2 text-ink-2")}>
                     <Icon className="size-6" aria-hidden />

@@ -219,6 +219,8 @@ export type Feature<I, O extends z.ZodType> = {
   user: (input: I) => string;
   images?: (input: I) => ImageInput[] | undefined;
   pdf?: (input: I) => string | undefined;
+  /** Small, frequent task: may run on AI_FAST_MODEL to save cost. */
+  fast?: boolean;
   /** Post-validation beyond the schema (e.g. quotes must exist). Return problems. */
   check?: (input: I, out: z.infer<O>) => string[];
   demo: (input: I) => z.infer<O>;
@@ -228,7 +230,7 @@ const json = (v: unknown) => JSON.stringify(v, null, 1);
 
 export const features = {
   enrich: {
-    id: "enrich", version: "enrich@1", schema: enrichOutput, effort: "low", maxTokens: 4000,
+    id: "enrich", version: "enrich@1", fast: true, schema: enrichOutput, effort: "low", maxTokens: 4000,
     system: `${TEACHING_PRINCIPLES}
 Task: enrich a vocabulary entry for the learner's personal dictionary. Keep definitions concise. Give 2-4 natural example sentences (at least one suitable for academic writing). Collocations must be genuinely frequent. Distinguish near-synonyms precisely in "confusables" (context, register, intensity). If you are unsure about any field, leave it empty/null and explain in "uncertainty"; never invent.`,
     user: (i: EnrichInput) => `Entry:\n${json(i)}\nRespect the meaning given by the learner if present.`,
@@ -257,7 +259,7 @@ Task: extract vocabulary entries from a school vocabulary list (text, photo or P
   } satisfies Feature<ParseListInput, typeof parseListOutput>,
 
   classify: {
-    id: "classify", version: "classify@1", schema: classifyOutput, effort: "low", maxTokens: 6000,
+    id: "classify", version: "classify@1", fast: true, schema: classifyOutput, effort: "low", maxTokens: 6000,
     system: `${TEACHING_PRINCIPLES}
 Task: organise vocabulary into useful topics and subtopics for an English Abitur course, based on the actual words (not a fixed list). Prefer the learner's existing topic names when they fit. Every key must appear exactly once. Use "Unsorted" only when nothing fits.`,
     user: (i: ClassifyInput) => `Existing topics: ${json(i.existingTopics)}\nItems:\n${json(i.items)}`,
@@ -274,7 +276,7 @@ Task: organise vocabulary into useful topics and subtopics for an English Abitur
   } satisfies Feature<ClassifyInput, typeof classifyOutput>,
 
   evaluate: {
-    id: "evaluate", version: "evaluate@1", schema: evaluateOutput, effort: "low", maxTokens: 4000,
+    id: "evaluate", version: "evaluate@1", fast: true, schema: evaluateOutput, effort: "low", maxTokens: 4000,
     system: `${TEACHING_PRINCIPLES}
 Task: evaluate one learner answer for the given exercise and objective. Score 0-1 reflects how well the objective was met (1 = fully correct and natural). Judge meaning, grammar, collocation, naturalness and register separately in "issues" with severity "error" (incorrect), "unnatural" (understandable but not idiomatic) or "suggestion" (optional refinement). If the answer is already excellent, say so and leave issues empty. Give a guiding "hintQuestion" instead of a correction when the learner could fix it themselves. "improvedVersion" should stay close to the learner's sentence. List other valid answers in "alternatives". Do not penalise a target word that does not fit the learner's idea if they used a valid alternative.`,
     user: (i: EvaluateInput) => `Exercise (${i.task}): ${i.instructions}\nObjective: ${i.objective}\nTarget words: ${json(i.targetWords)}\n${i.sourceText ? `Source: ${i.sourceText}\n` : ""}${i.referenceAnswers?.length ? `Reference answers (not the only valid ones): ${json(i.referenceAnswers)}\n` : ""}Learner answer:\n"""${i.learnerAnswer}"""`,
@@ -344,7 +346,7 @@ Task: create an original writing task. If a source text is needed (analysis, lit
   } satisfies Feature<PromptInput, typeof promptOutput>,
 
   mindmap: {
-    id: "mindmap", version: "mindmap@1", schema: mindmapOutput, effort: "low", maxTokens: 6000,
+    id: "mindmap", version: "mindmap@1", fast: true, schema: mindmapOutput, effort: "low", maxTokens: 6000,
     system: `${TEACHING_PRINCIPLES}
 Task: suggest meaningful, labelled relationships between vocabulary items of one topic (and a few closely related academic expressions). Every link needs a relation type and a short note explaining it (e.g. "mitigate ≠ prevent: reduces, does not stop"). No vague links.`,
     user: (i: MindmapInput) => `Topic: ${i.topic}\nWords:\n${json(i.entries)}`,
@@ -352,7 +354,7 @@ Task: suggest meaningful, labelled relationships between vocabulary items of one
   } satisfies Feature<MindmapInput, typeof mindmapOutput>,
 
   challenge: {
-    id: "challenge", version: "challenge@1", schema: challengeOutput, effort: "medium", maxTokens: 3000,
+    id: "challenge", version: "challenge@1", fast: true, schema: challengeOutput, effort: "medium", maxTokens: 3000,
     system: `${TEACHING_PRINCIPLES}
 Task: the learner challenges or asks about a feedback comment on their writing. Re-examine the comment honestly. If the learner's argument is valid (dictionary usage, context, an acceptable alternative), revise or withdraw the comment. If the comment stands, explain the principle clearly with an example. For "clarify" requests, keep the decision "upheld" unless the comment was wrong, and explain more simply.`,
     user: (i: ChallengeInput) => `Mode: ${i.mode}\nText excerpt context:\n"""${i.text.slice(0, 4000)}"""\nComment: ${json(i.annotation)}\nLearner says: """${i.argument}"""`,
