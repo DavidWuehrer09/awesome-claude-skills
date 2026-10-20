@@ -1,0 +1,164 @@
+{
+  "type": "object",
+  "required": ["attempt_id", "exam_id", "version", "course_specific", "independent", "dimensions", "strengths",
+               "comments", "estimate", "improvement_plan", "lab", "model_answer", "weakness_observations"],
+  "properties": {
+    "id": {"type": "string"},
+    "created": {"type": "string"},
+    "attempt_id": {"type": "string"},
+    "exam_id": {"type": "string"},
+    "version": {"type": "integer", "minimum": 1},
+    "course_specific": {
+      "type": "object",
+      "required": ["rubric_basis", "summary"],
+      "properties": {
+        "rubric_basis": {"enum": ["teacher_rubric", "teacher_criteria_partial", "none_available"]},
+        "rubric_material_ids": {"type": "array", "items": {"type": "string"}},
+        "summary": {"type": "string", "minLength": 1},
+        "applied_criteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["criterion", "provenance", "judgement", "evidence_sufficient"],
+            "properties": {
+              "criterion": {"type": "string"},
+              "provenance": {"enum": ["teacher_explicit", "observed_pattern", "official_guidance", "general_principle", "ai_suggestion"]},
+              "judgement": {"type": "string"},
+              "evidence_sufficient": {"type": "boolean"}
+            }
+          }
+        },
+        "insufficient_evidence_notes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "independent": {
+      "type": "object",
+      "required": ["summary"],
+      "properties": {"summary": {"type": "string", "minLength": 1}, "standards_note": {"type": "string"}}
+    },
+    "dimensions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["key", "applicable", "level", "comment"],
+        "properties": {
+          "key": {"enum": ["task_fulfilment", "content", "argumentation", "structure", "source_analysis", "evidence",
+                           "vocabulary", "idiomaticity", "grammar", "register", "mechanics", "overall"]},
+          "task": {"type": "string"},
+          "applicable": {"type": "boolean"},
+          "level": {"enum": ["excellent", "strong", "solid", "adequate", "weak", "very_weak", "not_assessed"]},
+          "comment": {"type": "string"},
+          "points_low": {"type": "integer", "minimum": 0, "maximum": 15},
+          "points_high": {"type": "integer", "minimum": 0, "maximum": 15}
+        }
+      }
+    },
+    "strengths": {
+      "type": "array",
+      "items": {"type": "object", "required": ["task", "original", "why_strong"],
+                "properties": {"task": {"type": "string"}, "original": {"type": "string", "minLength": 1},
+                               "why_strong": {"type": "string", "minLength": 1}}}
+    },
+    "comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "task", "original", "problem", "why_weakens", "category", "english_status", "severity", "provenance"],
+        "properties": {
+          "id": {"type": "string"},
+          "task": {"type": "string"},
+          "original": {"type": "string", "minLength": 1},
+          "problem": {"type": "string", "minLength": 1},
+          "why_weakens": {"type": "string"},
+          "alternative": {"type": ["string", "null"]},
+          "why_better": {"type": ["string", "null"]},
+          "category": {"enum": ["content", "language_error", "style", "optional_refinement", "structure", "task_fulfilment"]},
+          "english_status": {"enum": ["incorrect", "unnatural", "imprecise", "valid_less_effective", "excellent", "not_language"]},
+          "severity": {"enum": ["major", "moderate", "minor", "none"]},
+          "provenance": {"enum": ["teacher_explicit", "observed_pattern", "official_guidance", "general_principle", "ai_suggestion"]},
+          "dimension": {"type": "string"},
+          "withdrawn": {"type": "boolean"},
+          "history": {"type": "array"}
+        }
+      }
+    },
+    "estimate": {
+      "type": "object",
+      "required": ["scale", "low", "high", "basis", "assumptions", "evidence", "limiting_factors", "most_valuable_changes", "disclaimer"],
+      "properties": {
+        "scale": {"enum": ["bavarian_0_15"]},
+        "low": {"type": "integer", "minimum": 0, "maximum": 15},
+        "high": {"type": "integer", "minimum": 0, "maximum": 15},
+        "best": {"type": ["integer", "null"], "minimum": 0, "maximum": 15},
+        "basis": {"enum": ["teacher_rubric", "teacher_points_allocation", "approximation"]},
+        "assumptions": {"type": "array", "items": {"type": "string"}},
+        "evidence": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "limiting_factors": {"type": "array", "items": {"type": "string"}},
+        "most_valuable_changes": {"type": "array", "items": {"type": "string"}},
+        "disclaimer": {"type": "string", "minLength": 20}
+      }
+    },
+    "improvement_plan": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "object", "required": ["priority", "focus", "action"],
+                "properties": {"priority": {"type": "integer", "minimum": 1}, "focus": {"type": "string"},
+                               "action": {"type": "string"}, "skill": {"type": "string"}}}
+    },
+    "lab": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task", "original", "level1_correct", "level2_stronger", "explanation", "exercise"],
+        "properties": {
+          "task": {"type": "string"},
+          "original": {"type": "string", "minLength": 1},
+          "level1_correct": {"type": "string", "minLength": 1},
+          "level2_stronger": {"type": "string", "minLength": 1},
+          "level3_high_level": {"type": ["string", "null"]},
+          "explanation": {
+            "type": "object",
+            "required": ["effective", "nuance", "improves", "why_in_context", "risks"],
+            "properties": {"effective": {"type": "string"}, "nuance": {"type": "string"},
+                           "improves": {"type": "array", "items": {"enum": ["reasoning", "structure", "analysis", "language"]}},
+                           "why_in_context": {"type": "string"}, "risks": {"type": "string"}}
+          },
+          "exercise": {"type": "object", "required": ["instruction"],
+                       "properties": {"instruction": {"type": "string", "minLength": 5}, "material": {"type": "string"},
+                                      "answer_key": {"type": "string"}}}
+        }
+      }
+    },
+    "model_answer": {
+      "type": "object",
+      "required": ["per_task"],
+      "properties": {
+        "per_task": {"type": "array", "minItems": 1,
+                     "items": {"type": "object", "required": ["task", "text", "why_effective"],
+                               "properties": {"task": {"type": "string"}, "text": {"type": "string", "minLength": 1},
+                                              "why_effective": {"type": "array", "items": {"type": "string"}}}}},
+        "alternative_interpretations": {"type": "array", "items": {"type": "string"}},
+        "comparisons": {"type": "array",
+                        "items": {"type": "object", "required": ["task", "student", "model", "already_strong", "difference"],
+                                  "properties": {"task": {"type": "string"}, "student": {"type": "string"},
+                                                 "model": {"type": "string"}, "already_strong": {"type": "string"},
+                                                 "difference": {"type": "string"}}}}
+      }
+    },
+    "weakness_observations": {
+      "type": "array",
+      "items": {"type": "object", "required": ["skill", "present"],
+                "properties": {"skill": {"type": "string"}, "present": {"type": "boolean"},
+                               "severity": {"enum": ["major", "moderate", "minor", "none"]},
+                               "comment_ids": {"type": "array", "items": {"type": "string"}},
+                               "note": {"type": "string"}}}
+    },
+    "vocab_usage": {"type": "array", "items": {"type": "object", "required": ["term", "used"],
+                     "properties": {"term": {"type": "string"}, "used": {"type": "boolean"},
+                                    "natural": {"type": "boolean"}, "comment": {"type": "string"}}}},
+    "disputes": {"type": "array"},
+    "unhelpful": {"type": "array"},
+    "validation_warnings": {"type": "array"}
+  }
+}

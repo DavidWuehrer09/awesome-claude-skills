@@ -1,0 +1,111 @@
+{
+  "title": "Klausur Practice: Working Lives in the Age of AI",
+  "topic": "Artificial intelligence and the future of work",
+  "exam_type": "Klausur",
+  "difficulty": "realistic",
+  "mode": "practice",
+  "duration_minutes": 90,
+  "permitted_resources": ["Monolingual dictionary"],
+  "general_instructions": "Answer all three tasks in English. Refer to the text using line numbers where appropriate.",
+  "reference_exam_ids": [],
+  "sources": [
+    {
+      "id": "M1",
+      "title": "The Quiet Desk",
+      "kind": "fictional_practice",
+      "label": "Fictional practice text written for this exam. It is not a real publication and has no real author.",
+      "line_numbered": true,
+      "text": "Every morning at half past eight, the office I work in grows a little quieter.\nIt is not that fewer people come in; it is that fewer of them need to talk.\nThe questions we once shouted across the room – Where is the latest version?\nWho has the client's number? – are now answered instantly by software that\nnever sighs, never forgets and never asks for a pay rise.\n\nMany of my colleagues welcome this. They describe the new tools as \"a second\npair of hands\" and point out, quite rightly, that nobody misses copying figures\nfrom one spreadsheet into another. Yet I cannot shake the feeling that something\nvaluable is disappearing along with the drudgery.\n\nEconomists like to reassure us that technology has always created more jobs than\nit destroyed. That may be true in the long run, but, as one of my younger\ncolleagues put it, \"nobody lives in the long run.\" A graduate who cannot find an\nentry-level position today will not be comforted by statistics about 2040.\n\nWhat worries me most is not unemployment but apprenticeship. Junior staff used to\nlearn by doing the dull tasks that machines now perform. If the first rung of the\nladder is removed, how is anyone supposed to climb?\n\nNone of this means we should smash the machines. It means we should decide\ndeliberately which skills we want people to keep, and design work around them.\nCompanies that treat AI merely as a way to cut costs may save money this year;\nthose that use it to make their staff more capable will still have experienced\nstaff in ten years' time.\n\nThe quiet in our office is efficient. Whether it is also healthy depends on\nchoices we have barely begun to make."
+    }
+  ],
+  "tasks": [
+    {
+      "number": "1",
+      "type": "summary",
+      "operator": "summarise",
+      "instruction": "Summarise the author's concerns about the growing use of artificial intelligence at work, as presented in the text.",
+      "source_ids": ["M1"],
+      "expected_length": {"min": 120, "max": 150, "unit": "words"},
+      "suggested_minutes": 20,
+      "points": 10
+    },
+    {
+      "number": "2",
+      "type": "non_fiction_analysis",
+      "operator": "analyse",
+      "instruction": "Analyse how the author makes their warning persuasive. Consider the structure of the text and the use of language.",
+      "source_ids": ["M1"],
+      "suggested_minutes": 30,
+      "points": 15
+    },
+    {
+      "number": "3",
+      "type": "comment",
+      "operator": "comment",
+      "instruction": "\"Companies that treat AI merely as a way to cut costs may save money this year\" (l. 19). Comment on this view.",
+      "source_ids": ["M1"],
+      "expected_length": {"min": 250, "max": 300, "unit": "words"},
+      "suggested_minutes": 35,
+      "points": 15
+    }
+  ],
+  "marking": {
+    "origin": "ai_practice",
+    "label": "AI-generated practice scheme, not your teacher's",
+    "total_points": 40,
+    "allocation": [
+      {"task": "1", "content": 5, "language": 5},
+      {"task": "2", "content": 8, "language": 7},
+      {"task": "3", "content": 8, "language": 7}
+    ],
+    "criteria": [
+      {"task": "1", "criterion": "Main concerns covered in own words, simple present, no quotations, within word limit"},
+      {"task": "2", "criterion": "Devices and structural moves are identified AND linked to their persuasive effect, with line references"},
+      {"task": "3", "criterion": "Clear position, developed arguments with examples, a genuine counterargument, conclusion"}
+    ]
+  },
+  "hidden": {
+    "task_expectations": [
+      {
+        "task": "1",
+        "expected_content": [
+          "Office work is changing: software answers routine questions, so colleagues talk less",
+          "Author concedes that colleagues welcome relief from tedious tasks",
+          "Doubts economists' long-term reassurance: graduates need jobs now",
+          "Main worry: loss of learning opportunities for junior staff",
+          "Calls for deliberate decisions about which skills to keep; cost-cutting alone is short-sighted"
+        ],
+        "common_pitfalls": ["quoting the text", "adding personal opinion", "assuming the author's gender"]
+      },
+      {
+        "task": "2",
+        "expected_content": [
+          "Personal, first-person opening creates familiarity",
+          "Concession ('quite rightly') before 'Yet' makes the author seem balanced",
+          "Quotation of a younger colleague contrasts statistics with individual experience",
+          "Ladder metaphor plus rhetorical question makes the abstract problem concrete",
+          "Frame: return to the quiet office; antithesis 'efficient' vs 'healthy'"
+        ],
+        "acceptable_alternatives": ["Focus on tone (calm, reflective) as a persuasive strategy"],
+        "common_pitfalls": ["listing devices without effects", "evaluating whether the author is right"]
+      },
+      {
+        "task": "3",
+        "expected_content": [
+          "Introduction that frames the issue",
+          "Arguments for long-term investment in staff (skills, motivation, succession)",
+          "A developed counterargument (e.g. small firms' margins, competition)",
+          "Reasoned conclusion"
+        ]
+      }
+    ],
+    "vocabulary_targets": ["entry-level", "drudgery", "to cut costs", "in the long run"],
+    "weakness_targets": []
+  },
+  "provenance": {
+    "format_based_on": [],
+    "profile_entries_used": [],
+    "notes": "Structure follows the sample reference exam (summary, analysis, comment; 90 minutes). Source text and tasks are newly written.",
+    "assumptions": ["Line references in task 3 refer to the line numbers shown in the Exam Room"]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "required": ["id", "created", "topics", "exam_type", "difficulty", "mode", "duration_minutes", "task_count"],
+  "properties": {
+    "id": {"type": "string"},
+    "created": {"type": "string"},
+    "topics": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "source_material_ids": {"type": "array", "items": {"type": "string"}},
+    "reference_exam_ids": {"type": "array", "items": {"type": "string"}},
+    "exam_type": {"type": "string", "minLength": 1},
+    "difficulty": {"enum": ["consolidation", "realistic", "stretch", "abitur"]},
+    "mode": {"enum": ["practice", "challenging", "mock"]},
+    "duration_minutes": {"type": "integer", "minimum": 10, "maximum": 330},
+    "task_count": {"type": "integer", "minimum": 1, "maximum": 8},
+    "target_words": {"type": ["integer", "null"], "minimum": 50, "maximum": 2500},
+    "include_vocabulary": {"type": "boolean"},
+    "follow_reference_closely": {"type": ["string", "null"]},
+    "focus_weaknesses": {"type": "boolean"},
+    "match_teacher_format": {"type": "boolean"},
+    "notes": {"type": "string"},
+    "defaults_used": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "type": "object",
+  "required": ["id", "created", "title", "topic", "exam_type", "difficulty", "duration_minutes", "sources", "tasks", "marking", "hidden", "provenance"],
+  "properties": {
+    "id": {"type": "string"},
+    "created": {"type": "string"},
+    "blueprint_id": {"type": ["string", "null"]},
+    "title": {"type": "string", "minLength": 3},
+    "topic": {"type": "string", "minLength": 2},
+    "exam_type": {"type": "string", "minLength": 2},
+    "difficulty": {"enum": ["consolidation", "realistic", "stretch", "abitur"]},
+    "mode": {"enum": ["practice", "challenging", "mock"]},
+    "duration_minutes": {"type": "integer", "minimum": 10, "maximum": 330},
+    "permitted_resources": {"type": "array", "items": {"type": "string"}},
+    "general_instructions": {"type": "string"},
+    "reference_exam_ids": {"type": "array", "items": {"type": "string"}},
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "kind", "text"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["fictional_practice", "authentic", "uploaded_material"]},
+          "label": {"type": "string"},
+          "material_id": {"type": "string"},
+          "line_numbered": {"type": "boolean"},
+          "text": {"type": "string", "minLength": 1},
+          "citation": {
+            "type": "object",
+            "properties": {
+              "author": {"type": "string"}, "title": {"type": "string"}, "publication": {"type": "string"},
+              "date": {"type": "string"}, "url": {"type": "string"}, "isbn": {"type": "string"},
+              "adapted": {"type": "boolean"}, "verified": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["number", "type", "instruction"],
+        "properties": {
+          "number": {"type": "string", "minLength": 1},
+          "type": {"enum": ["reading_comprehension", "summary", "non_fiction_analysis", "stylistic_analysis",
+                             "intention_tone_audience", "literary_analysis", "characterisation", "comparison",
+                             "comment", "discussion", "mediation", "text_based_writing", "other"]},
+          "operator": {"type": "string"},
+          "instruction": {"type": "string", "minLength": 10},
+          "source_ids": {"type": "array", "items": {"type": "string"}},
+          "expected_length": {
+            "type": "object",
+            "properties": {"min": {"type": "integer", "minimum": 0}, "max": {"type": "integer", "minimum": 1},
+                           "unit": {"enum": ["words", "sentences", "paragraphs"]}, "note": {"type": "string"}}
+          },
+          "suggested_minutes": {"type": "integer", "minimum": 1},
+          "points": {"type": ["integer", "number", "null"], "minimum": 0}
+        }
+      }
+    },
+    "marking": {
+      "type": "object",
+      "required": ["origin"],
+      "properties": {
+        "origin": {"enum": ["teacher_provided", "official", "ai_practice", "none"]},
+        "label": {"type": "string"},
+        "total_points": {"type": ["integer", "number", "null"]},
+        "source_material_ids": {"type": "array", "items": {"type": "string"}},
+        "source_url": {"type": "string"},
+        "allocation": {"type": "array", "items": {"type": "object"}},
+        "criteria": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "hidden": {
+      "type": "object",
+      "required": ["task_expectations"],
+      "properties": {
+        "task_expectations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["task", "expected_content"],
+            "properties": {
+              "task": {"type": "string"},
+              "expected_content": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+              "acceptable_alternatives": {"type": "array", "items": {"type": "string"}},
+              "marking_notes": {"type": "string"},
+              "common_pitfalls": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "vocabulary_targets": {"type": "array", "items": {"type": "string"}},
+        "weakness_targets": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["format_based_on", "notes"],
+      "properties": {
+        "format_based_on": {"type": "array", "items": {"type": "string"}},
+        "profile_entries_used": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "string"},
+        "assumptions": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "validation": {"type": "object"}
+  }
+}

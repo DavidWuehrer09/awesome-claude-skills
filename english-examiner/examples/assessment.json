@@ -1,0 +1,221 @@
+{
+  "attempt_id": "__ATTEMPT_ID__",
+  "exam_id": "__EXAM_ID__",
+  "version": 1,
+  "course_specific": {
+    "rubric_basis": "teacher_criteria_partial",
+    "rubric_material_ids": ["__RUBRIC_ID__"],
+    "summary": "Your teacher's assessment sheet separates content and language and states explicit expectations for summaries, analysis and comments. It gives no point bands, so these criteria inform the judgement but cannot be converted into points directly.",
+    "applied_criteria": [
+      {"criterion": "Analysis: every claim about a stylistic device must be linked to its effect on the reader.", "provenance": "teacher_explicit",
+       "judgement": "Partly missed: the ladder metaphor and the quotation are named but their effect is not explained.", "evidence_sufficient": true},
+      {"criterion": "Comment: a clear introduction, a counterargument and a conclusion are expected.", "provenance": "teacher_explicit",
+       "judgement": "Conclusion present; introduction missing; counterargument is a single undeveloped sentence.", "evidence_sufficient": true},
+      {"criterion": "Word limits: answers far below the expected length cannot receive full marks for content.", "provenance": "teacher_explicit",
+       "judgement": "Task 3 has about 85 words against an expected 250-300.", "evidence_sufficient": true},
+      {"criterion": "How strictly language errors are weighted against content", "provenance": "observed_pattern",
+       "judgement": "Unknown: only one corrected exam is available, so the weighting cannot be inferred.", "evidence_sufficient": false}
+    ],
+    "insufficient_evidence_notes": [
+      "No point bands or Notenschlüssel in the uploaded materials, so the estimate below is an approximation.",
+      "Only one teacher-corrected exam has been uploaded; recurring teacher preferences are still provisional."
+    ]
+  },
+  "independent": {
+    "summary": "The summary is largely accurate and complete but slips into informal language and assumes the author's gender. The analysis identifies relevant features (anecdotal opening, rhetorical question, metaphor, frame) but mostly lists them; the reasoning 'This shows that the author is right' confuses analysis with evaluation. The comment has a sensible, independent idea (succession when older staff retire) but is far too short and lacks an introduction and a developed counterargument.",
+    "standards_note": "Judged against general upper-secondary (Oberstufe) expectations for text analysis and argumentative writing."
+  },
+  "dimensions": [
+    {"key": "task_fulfilment", "applicable": true, "level": "adequate", "comment": "Tasks 1 and 2 are addressed; task 3 is well below the expected length."},
+    {"key": "content", "applicable": true, "level": "solid", "comment": "The summary covers all five main points."},
+    {"key": "argumentation", "task": "3", "applicable": true, "level": "weak", "comment": "Two arguments, one example, counterargument only asserted."},
+    {"key": "structure", "applicable": true, "level": "adequate", "comment": "Clear order in task 2; task 3 has no introduction."},
+    {"key": "source_analysis", "task": "2", "applicable": true, "level": "weak", "comment": "Features are identified but their effects are rarely explained; the concession structure is not mentioned."},
+    {"key": "evidence", "task": "2", "applicable": true, "level": "adequate", "comment": "Two apt quotations, but no line references and little explanation."},
+    {"key": "vocabulary", "applicable": true, "level": "adequate", "comment": "Accurate but general ('many rhetorical devices', 'more interesting')."},
+    {"key": "idiomaticity", "applicable": true, "level": "solid", "comment": "Mostly natural; a few German-influenced structures."},
+    {"key": "grammar", "applicable": true, "level": "solid", "comment": "Two genuine errors (missing genitive apostrophe, negation with 'have')."},
+    {"key": "register", "applicable": true, "level": "adequate", "comment": "Contractions and 'anymore' are too informal for a summary."},
+    {"key": "mechanics", "applicable": true, "level": "solid", "comment": "'dont' and 'can not' are spelling slips."},
+    {"key": "overall", "applicable": true, "level": "adequate", "comment": "A reliable base with clear room to grow in analytical depth and length control."}
+  ],
+  "strengths": [
+    {"task": "2", "original": "At the end the author repeats the idea of the quiet office, so the text has a frame.",
+     "why_strong": "You noticed the circular structure, which many students miss. Add its effect and this becomes a strong point."},
+    {"task": "3", "original": "For example when older workers retire nobody will know how to do the job because the young ones never learned it.",
+     "why_strong": "An independent, concrete consequence that extends the text's apprenticeship argument instead of repeating it."}
+  ],
+  "comments": [
+    {"id": "c1", "task": "3", "original": "I agree with the statement.", "severity": "major", "category": "task_fulfilment",
+     "english_status": "not_language", "provenance": "teacher_explicit",
+     "problem": "The comment has about 85 words instead of 250-300 and starts without an introduction.",
+     "why_weakens": "Your teacher's sheet states that answers far below the expected length cannot receive full content marks, and an introduction is explicitly expected.",
+     "alternative": "Few people would object to software that saves time and money. Whether cost-cutting alone is a wise strategy, however, is far less certain.",
+     "why_better": "It frames the issue before taking a position and leads naturally into a balanced discussion."},
+    {"id": "c2", "task": "2", "original": "This shows that the author is right.", "severity": "major", "category": "content",
+     "english_status": "not_language", "provenance": "general_principle",
+     "problem": "An analysis explains how the author persuades; it does not decide whether the author is right. A quotation cannot prove that.",
+     "why_weakens": "It replaces analysis with an unsupported evaluation exactly where you should explain the effect of the quotation.",
+     "alternative": "By quoting a colleague who says that \"nobody lives in the long run\", the author contrasts the economists' reassuring statistics with the immediate needs of young graduates.",
+     "why_better": "It names the technique, links it to the argument and explains its effect on the reader."},
+    {"id": "c3", "task": "2", "original": "There is also a metaphor of the ladder.", "severity": "moderate", "category": "content",
+     "english_status": "imprecise", "provenance": "teacher_explicit",
+     "problem": "The device is named but its effect is not explained.",
+     "why_weakens": "Your teacher's sheet requires every device to be linked to its effect; naming alone earns little.",
+     "alternative": "The ladder metaphor turns the abstract loss of training opportunities into a concrete image: if the lowest rung disappears, newcomers cannot even begin their careers.",
+     "why_better": "It explains what the image makes the reader see and why that supports the author's warning."},
+    {"id": "c4", "task": "2", "original": "The author uses many rhetorical devices to show that the issue is important.", "severity": "moderate", "category": "content",
+     "english_status": "imprecise", "provenance": "general_principle",
+     "problem": "The opening sentence could introduce any analysis of any text.",
+     "why_weakens": "A generic thesis gives your paragraphs no direction and signals that the analysis may be a list of devices.",
+     "alternative": "The author makes the warning persuasive by conceding the benefits of AI before raising doubts, so that the criticism sounds balanced rather than alarmist.",
+     "why_better": "It states a specific, arguable thesis about this text that the rest of the answer can prove."},
+    {"id": "c5", "task": "3", "original": "On the other hand, small companies have not much money and must save costs.", "severity": "moderate", "category": "content",
+     "english_status": "incorrect", "provenance": "teacher_explicit",
+     "problem": "The counterargument is asserted in one sentence and immediately dropped; the negation is also incorrect.",
+     "why_weakens": "A counterargument is explicitly expected; an undeveloped one does not show that you have weighed both sides.",
+     "alternative": "On the other hand, small businesses often operate on tight margins, and automating routine tasks may decide whether they survive a difficult year. For them, refusing to save costs with AI would be naive.",
+     "why_better": "It develops the opposing view with a reason and a consequence and corrects the grammar ('do not have much money' / 'operate on tight margins')."},
+    {"id": "c6", "task": "1", "original": "The authors biggest worry", "severity": "minor", "category": "language_error",
+     "english_status": "incorrect", "provenance": "general_principle",
+     "problem": "Missing genitive apostrophe.",
+     "why_weakens": "A basic accuracy error that is easy to avoid.",
+     "alternative": "The author's main concern", "why_better": "Correct genitive; 'main concern' is more formal than 'biggest worry'."},
+    {"id": "c7", "task": "1", "original": "they dont have to copy figures anymore", "severity": "minor", "category": "language_error",
+     "english_status": "incorrect", "provenance": "general_principle",
+     "problem": "Misspelt contraction, and contractions are too informal for a summary.",
+     "why_weakens": "Spelling and register both count in the language mark.",
+     "alternative": "they no longer have to transfer figures between spreadsheets", "why_better": "Correct, formal and more precise."},
+    {"id": "c8", "task": "1", "original": "He also criticises economists", "severity": "minor", "category": "content",
+     "english_status": "not_language", "provenance": "general_principle",
+     "problem": "The text never reveals the author's gender.",
+     "why_weakens": "It adds information that is not in the text.",
+     "alternative": "The author also questions economists' claim", "why_better": "Accurate, and 'questions' matches the author's measured tone better than 'criticises'."},
+    {"id": "c9", "task": "1", "original": "the office is more quiet", "severity": "minor", "category": "style",
+     "english_status": "unnatural", "provenance": "general_principle",
+     "problem": "Understandable, but the comparative 'quieter' is the natural form.",
+     "why_weakens": "Small unnatural forms add up in the language mark.",
+     "alternative": "the office has become quieter", "why_better": "Natural comparative; the present perfect also expresses the gradual change."},
+    {"id": "c10", "task": "3", "original": "All in all I think companies should invest in their workers", "severity": "minor", "category": "optional_refinement",
+     "english_status": "valid_less_effective", "provenance": "ai_suggestion",
+     "problem": "Correct English. 'I think' slightly weakens a conclusion that your arguments support.",
+     "why_weakens": "Not an error; only a matter of emphasis.",
+     "alternative": "All in all, companies would be wise to invest in their workers", "why_better": "Keeps your position while sounding more confident and formal."}
+  ],
+  "estimate": {
+    "scale": "bavarian_0_15",
+    "low": 5,
+    "high": 7,
+    "best": 6,
+    "basis": "approximation",
+    "assumptions": [
+      "No teacher point bands are available; the range is an informed approximation using the AI practice scheme (content and language per task).",
+      "Tasks are weighted 10/15/15 as in the practice scheme."
+    ],
+    "evidence": [
+      "Task 1 covers all main points with minor language and register slips.",
+      "Task 2 identifies five relevant features but explains the effect of only one or two.",
+      "Task 3 is roughly a third of the expected length and lacks an introduction and a developed counterargument."
+    ],
+    "limiting_factors": [
+      "Task 3 length and structure (largest single factor).",
+      "Device-spotting without effects in task 2.",
+      "Generic analytical phrasing."
+    ],
+    "most_valuable_changes": [
+      "Write a complete 250-300-word comment with introduction, developed counterargument and conclusion.",
+      "For every device in an analysis, add 'which ... / so that the reader ...' explaining its effect.",
+      "Open the analysis with a specific thesis about this text."
+    ],
+    "disclaimer": "This is an indicative estimate by an AI tutor, not an official grade and not a prediction of your teacher's judgement."
+  },
+  "improvement_plan": [
+    {"priority": 1, "focus": "Comment structure and length", "action": "Plan 4 paragraphs (intro, 2 arguments, counterargument + rebuttal, conclusion) before writing; aim for 270 words.", "skill": "inadequate_task_fulfilment"},
+    {"priority": 2, "focus": "Device -> effect", "action": "Use the pattern 'technique + example + effect on the reader + link to intention' for every feature.", "skill": "device_spotting_without_effect"},
+    {"priority": 3, "focus": "Specific thesis sentences", "action": "Rewrite the first sentence of your last three analyses so that each could only belong to that text.", "skill": "repetitive_analytical_phrasing"}
+  ],
+  "lab": [
+    {
+      "task": "2",
+      "original": "The author uses many rhetorical devices to show that the issue is important.",
+      "level1_correct": "The author uses several rhetorical devices to emphasise the significance of the issue.",
+      "level2_stronger": "The author relies on personal experience and vivid imagery to make the consequences of automation feel immediate.",
+      "level3_high_level": "By conceding the benefits of AI before voicing doubts, the author presents the loss of on-the-job learning as a problem that even supporters of the technology should take seriously.",
+      "explanation": {
+        "effective": "It names a concrete strategy (concession before criticism) and its persuasive purpose.",
+        "nuance": "'even supporters' captures why the concession matters: it widens the audience the warning can reach.",
+        "improves": ["analysis", "structure"],
+        "why_in_context": "Task 2 asks how the warning is made persuasive; this sentence answers that question directly and sets up the following paragraphs.",
+        "risks": "Only use it if your body paragraphs actually discuss the concession; otherwise the thesis promises more than you deliver."
+      },
+      "exercise": {
+        "instruction": "Write a one-sentence thesis for an analysis of the sample reference text 'Swipe Left on Democracy?' that names a specific strategy and its effect.",
+        "answer_key": "For example: By opening with an ironic reversal of a familiar complaint, the author unsettles readers' assumptions about young voters before presenting the evidence."
+      }
+    },
+    {
+      "task": "3",
+      "original": "On the other hand, small companies have not much money and must save costs.",
+      "level1_correct": "On the other hand, small companies do not have much money and need to save costs.",
+      "level2_stronger": "On the other hand, small businesses often operate on tight margins, so saving costs through automation may be essential for them.",
+      "level3_high_level": null,
+      "explanation": {
+        "effective": "Level 2 adds a reason ('tight margins') and a consequence, which turns an assertion into an argument.",
+        "nuance": "'may be essential' concedes the point without abandoning your overall position.",
+        "improves": ["reasoning", "language"],
+        "why_in_context": "Your teacher expects a genuine counterargument; this version is one you can then rebut.",
+        "risks": "A Level 3 rewrite is not needed here: the next gain comes from adding a rebuttal sentence, not from more elaborate wording."
+      },
+      "exercise": {
+        "instruction": "Add a rebuttal sentence that starts with 'Even so,' and shows why small firms should still invest in their staff.",
+        "answer_key": "Even so, small firms depend even more on a few experienced employees, so losing their know-how would hit them particularly hard."
+      }
+    }
+  ],
+  "model_answer": {
+    "per_task": [
+      {
+        "task": "1",
+        "text": "In the fictional opinion piece \"The Quiet Desk\", the author reflects on how artificial intelligence is changing office work and what may be lost in the process. Although the author acknowledges that many colleagues welcome the new tools for removing tedious routine tasks, they fear that something valuable, apparently the everyday exchange between colleagues, is disappearing along with the drudgery. The author also doubts economists' claim that technology creates more jobs than it destroys, arguing that long-term statistics offer little comfort to graduates who need work now. Their main concern, however, is the loss of apprenticeship: if machines take over simple tasks, junior employees lose the chance to learn their profession. Instead of rejecting technology, the author calls for deliberate decisions about which skills to preserve and warns that companies using AI only to cut costs risk losing experienced staff in the future.",
+        "why_effective": ["Covers all five main points in the text's order", "Simple present, own words, no quotations", "Neutral reference to the author ('they')", "About 140 words"]
+      },
+      {
+        "task": "2",
+        "text": "The author develops their concerns gradually, which makes them appear balanced rather than alarmist. The text opens with a personal observation of an office that \"grows a little quieter\" every morning. This first-person perspective creates familiarity and invites readers to compare the scene with their own workplace, while the questions that follow (\"Where is the latest version? Who has the client's number?\") recreate the former atmosphere so that the reader senses what has been lost.\n\nInstead of dismissing the opposing view, the author concedes that colleagues \"point out, quite rightly,\" that nobody misses repetitive tasks. Only then does the contrastive \"Yet\" introduce doubts. This concession strengthens the author's credibility, because the criticism seems to come from someone who has considered both sides.\n\nThe central argument is supported by a vivid metaphor and a rhetorical question: \"If the first rung of the ladder is removed, how is anyone supposed to climb?\" The image makes the abstract problem of lost training opportunities concrete, and the question leaves readers to draw the uncomfortable conclusion themselves. Similarly, the colleague's remark that \"nobody lives in the long run\" exposes the gap between reassuring statistics and individual experience.\n\nFinally, the text returns to the quiet office, creating a frame. The closing contrast between \"efficient\" and \"healthy\" turns a description into a question of values and stresses that the outcome depends on \"choices we have barely begun to make\".",
+        "why_effective": ["Thesis names a specific strategy", "Each feature: example + effect + link to the warning", "Follows the structure of the text", "Short, exact quotations"]
+      },
+      {
+        "task": "3",
+        "text": "Few people would object to software that saves time and money. Yet the view that companies treating AI \"merely as a way to cut costs\" will only profit in the short term deserves serious consideration, because it raises the question of what makes a business successful over time.\n\nOn the one hand, it is understandable that firms look at costs first. Small businesses in particular often operate on tight margins, and automating routine tasks can decide whether they survive a difficult year. From this perspective, refusing to use AI for savings would be naive.\n\nOn the other hand, a strategy based only on savings overlooks how expertise is built. Experienced employees did not acquire their judgement from training courses alone but from years of routine work, mistakes and feedback. If entry-level tasks disappear and nothing replaces them, companies may soon find that nobody is ready to take over when senior staff retire. Moreover, employees who feel they are merely being replaced are unlikely to show the commitment and creativity that technology cannot provide.\n\nThe more convincing approach is therefore not to choose between efficiency and people but to combine them. A firm could, for instance, use AI for repetitive data entry while giving junior staff responsibility for checking results and dealing with clients, so that they still learn the business.\n\nAll in all, the view is largely persuasive: cutting costs with AI is legitimate, but companies that see it only as a savings tool risk exchanging a short-term gain for a long-term loss of skills.",
+        "why_effective": ["Introduction frames the issue", "Counterargument is developed, then answered", "Concrete example in the solution paragraph", "About 270 words"]
+      }
+    ],
+    "alternative_interpretations": [
+      "Task 2 could also centre on tone: the calm, reflective voice itself persuades by contrast with alarmist debates about AI.",
+      "Task 3 could reasonably disagree, for example by arguing that markets will force firms to train staff once skills become scarce."
+    ],
+    "comparisons": [
+      {"task": "2", "student": "There is also a metaphor of the ladder.",
+       "model": "The image makes the abstract problem of lost training opportunities concrete, and the question leaves readers to draw the uncomfortable conclusion themselves.",
+       "already_strong": "You chose the right feature: the ladder image is central to the text.",
+       "difference": "The model explains what the image does to the reader and why it matters for the argument."}
+    ]
+  },
+  "weakness_observations": [
+    {"skill": "inadequate_task_fulfilment", "present": true, "severity": "major", "comment_ids": ["c1"]},
+    {"skill": "word_count_control", "present": true, "severity": "major", "comment_ids": ["c1"]},
+    {"skill": "device_spotting_without_effect", "present": true, "severity": "moderate", "comment_ids": ["c3"]},
+    {"skill": "insufficient_textual_evidence", "present": true, "severity": "moderate", "comment_ids": ["c2"]},
+    {"skill": "repetitive_analytical_phrasing", "present": true, "severity": "moderate", "comment_ids": ["c4"]},
+    {"skill": "underdeveloped_counterarguments", "present": true, "severity": "moderate", "comment_ids": ["c5"]},
+    {"skill": "grammar_errors", "present": true, "severity": "minor", "comment_ids": ["c5", "c6"]},
+    {"skill": "register_slips", "present": true, "severity": "minor", "comment_ids": ["c7"]},
+    {"skill": "weak_transitions", "present": false},
+    {"skill": "summary_includes_opinion", "present": false}
+  ],
+  "vocab_usage": [
+    {"term": "in the long run", "used": true, "natural": true, "comment": "Used correctly in the conclusion of task 3."},
+    {"term": "entry-level", "used": false},
+    {"term": "drudgery", "used": false}
+  ]
+}

@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>__EXAM_TITLE__ · Exam Room</title>
+<style>
+:root {
+  --bg: #f6f5f1; --surface: #ffffff; --surface-2: #efede6; --text: #1d1d1b; --muted: #5f5d57;
+  --line: #d9d6cc; --accent: #2f5d8a; --accent-text: #ffffff; --warn: #9a5b00; --warn-bg: #fff3dd;
+  --danger: #a12a2a; --ok: #2e6b3f; --ok-bg: #e5f2e8; --focus: #2f5d8a55;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --surface: #1f1f1c; --surface-2: #2a2a26; --text: #ecebe6; --muted: #a7a59d;
+    --line: #3a3934; --accent: #8fb6dd; --accent-text: #0e1a26; --warn: #f0b45a; --warn-bg: #3a2c12;
+    --danger: #f08a8a; --ok: #8fd19e; --ok-bg: #1d3323; --focus: #8fb6dd55;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --surface: #1f1f1c; --surface-2: #2a2a26; --text: #ecebe6; --muted: #a7a59d;
+  --line: #3a3934; --accent: #8fb6dd; --accent-text: #0e1a26; --warn: #f0b45a; --warn-bg: #3a2c12;
+  --danger: #f08a8a; --ok: #8fd19e; --ok-bg: #1d3323; --focus: #8fb6dd55;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 16px/1.5 var(--sans); -webkit-text-size-adjust: 100%; }
+button, select, textarea, input { font: inherit; color: inherit; }
+button { cursor: pointer; border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
+  padding: 8px 14px; min-height: 40px; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+button[disabled] { opacity: .5; cursor: default; }
+
+header.bar { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: max(10px, env(safe-area-inset-top)) 16px 10px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+header.bar h1 { font-size: 1rem; margin: 0; flex: 1 1 220px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timer { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 1.15rem; padding: 4px 10px; border-radius: 8px; background: var(--surface-2); }
+.timer.low { color: var(--warn); background: var(--warn-bg); }
+.timer.over { color: var(--danger); }
+.saved { color: var(--muted); font-size: .85rem; min-width: 7em; }
+
+main { max-width: 1400px; margin: 0 auto; padding: 16px; }
+.start { max-width: 760px; margin: 24px auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+.start h2 { font-family: var(--serif); font-size: 1.6rem; margin: 0 0 4px; }
+.meta { color: var(--muted); margin: 0 0 16px; }
+.start ul { padding-left: 1.2em; }
+.choice { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
+.choice label { display: flex; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; background: var(--surface-2); }
+
+.room { display: none; }
+.room.on { display: block; }
+nav.tasks { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 8px; -webkit-overflow-scrolling: touch; }
+nav.tasks button { white-space: nowrap; display: flex; gap: 6px; align-items: center; }
+nav.tasks button[aria-current="true"] { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); display: inline-block; }
+.dot.started { background: var(--warn); }
+.dot.done { background: var(--ok); }
+
+.panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.pane { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.pane-head { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.pane-head h3 { margin: 0; font-size: .95rem; flex: 1; }
+.source { padding: 14px 18px 22px; max-height: calc(100vh - 220px); overflow: auto; font-family: var(--serif); font-size: 1.05rem; line-height: 1.65; }
+.source h4 { font-family: var(--sans); margin: 12px 0 2px; font-size: 1rem; }
+.source .label { font-family: var(--sans); font-size: .82rem; color: var(--warn); background: var(--warn-bg); padding: 4px 8px; border-radius: 6px; display: inline-block; margin: 4px 0 8px; }
+.source .cite { font-family: var(--sans); font-size: .82rem; color: var(--muted); margin-bottom: 8px; }
+.lines { counter-reset: ln; }
+.lines p { margin: 0; position: relative; padding-left: 2.6em; }
+.lines p::before { counter-increment: ln; content: counter(ln); position: absolute; left: 0; width: 2em; text-align: right; color: var(--muted); font: .75rem/2.1 var(--sans); }
+.lines p.blank::before { content: ""; counter-increment: none; }
+.plain p { margin: 0 0 .8em; }
+.task-text { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.task-text .num { font-weight: 700; margin-right: 6px; }
+.task-text .hint { color: var(--muted); font-size: .88rem; margin-top: 6px; }
+textarea.answer { display: block; width: 100%; min-height: 48vh; border: 0; resize: vertical; padding: 16px 18px; background: transparent;
+  font-family: var(--serif); font-size: 1.08rem; line-height: 1.7; border-radius: 0 0 12px 12px; }
+textarea.answer[readonly] { background: var(--surface-2); }
+.wc { padding: 8px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: .88rem; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.wc .out { color: var(--warn); }
+.toggle-source { display: none; }
+
+.notice { margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); display: none; }
+.notice.on { display: block; }
+.paused-veil { position: fixed; inset: 0; background: var(--bg); display: none; z-index: 20; align-items: center; justify-content: center; flex-direction: column; gap: 12px; padding: 16px; text-align: center; }
+.paused-veil.on { display: flex; }
+
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); width: min(560px, calc(100vw - 32px)); padding: 20px; }
+dialog::backdrop { background: #0008; }
+dialog table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+dialog td, dialog th { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 12px; }
+pre.export { white-space: pre-wrap; word-break: break-word; max-height: 30vh; overflow: auto; background: var(--surface-2); padding: 10px; border-radius: 8px; font-size: .8rem; }
+.done-box { max-width: 760px; margin: 24px auto; background: var(--ok-bg); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: none; }
+.done-box.on { display: block; }
+
+@media (max-width: 900px) {
+  .panes { grid-template-columns: 1fr; }
+  .source { max-height: 45vh; }
+  .toggle-source { display: inline-flex; }
+  .pane.src.collapsed .source { display: none; }
+  textarea.answer { min-height: 50vh; }
+}
+@media (max-width: 480px) {
+  main { padding: 10px 16px; }
+  header.bar { padding-left: 16px; padding-right: 16px; gap: 6px 8px; }
+  header.bar h1 { flex-basis: 100%; font-size: .9rem; }
+  header.bar button { padding: 6px 10px; min-height: 36px; }
+  header.bar #submitBtn { margin-left: auto; }
+  .timer { font-size: 1rem; }
+  .saved { display: none; }
+}
+@media print { header.bar, nav.tasks, .wc, .pane-head button { display: none; } .panes { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <h1 id="title"></h1>
+  <span class="saved" id="saved" aria-live="polite"></span>
+  <span class="timer" id="timer" role="timer" aria-live="off">--:--</span>
+  <button id="pauseBtn" hidden>Pause</button>
+  <button id="overviewBtn" hidden>Overview</button>
+  <button id="submitBtn" class="primary" hidden>Submit</button>
+</header>
+
+<main>
+  <section class="start" id="start">
+    <h2 id="startTitle"></h2>
+    <p class="meta" id="startMeta"></p>
+    <div id="general"></div>
+    <h3>Permitted resources</h3>
+    <ul id="resources"></ul>
+    <div class="choice" role="radiogroup" aria-label="Timing">
+      <label><input type="radio" name="timing" value="timed" checked> Timed (realistic)</label>
+      <label><input type="radio" name="timing" value="untimed"> Untimed practice</label>
+    </div>
+    <p class="meta">Your work autosaves in this browser. To continue on another device, use <b>Overview → Save progress file</b> and open it there with <b>Load progress file</b>.</p>
+    <div class="row" style="justify-content:flex-start">
+      <button class="primary" id="beginBtn">Begin exam</button>
+      <button id="loadBtn">Load progress file</button>
+      <input type="file" id="loadFile" accept="application/json,.json" hidden>
+    </div>
+  </section>
+
+  <section class="room" id="room">
+    <div class="notice" id="notice" role="status"></div>
+    <nav class="tasks" id="taskNav" aria-label="Tasks"></nav>
+    <div class="panes">
+      <article class="pane src" id="srcPane">
+        <div class="pane-head">
+          <h3>Material</h3>
+          <select id="srcSelect" aria-label="Choose material"></select>
+          <button class="toggle-source" id="toggleSrc" aria-expanded="true">Hide</button>
+        </div>
+        <div class="source" id="source" tabindex="0"></div>
+      </article>
+      <article class="pane">
+        <div class="task-text" id="taskText"></div>
+        <label for="answer" class="sr" style="position:absolute;left:-9999px">Your answer</label>
+        <textarea class="answer" id="answer" spellcheck="false" autocapitalize="sentences" autocomplete="off" placeholder="Write your answer here…"></textarea>
+        <div class="wc"><span id="wc">0 words</span><span id="wcTarget"></span></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="done-box" id="doneBox">
+    <h2 style="margin-top:0">Submitted</h2>
+    <p>Your answers are locked in this browser. Give the answer file to Claude to save and assess the attempt: download it, or copy it and paste it into the chat.</p>
+    <div class="row" style="justify-content:flex-start">
+      <button class="primary" id="dlDone">Download answer file</button>
+      <button id="copyDone">Copy answer file</button>
+    </div>
+  </section>
+</main>
+
+<div class="paused-veil" id="veil">
+  <h2>Paused</h2>
+  <p class="meta">The timer is stopped and the material is hidden.</p>
+  <button class="primary" id="resumeBtn">Resume</button>
+</div>
+
+<dialog id="overview">
+  <h2 style="margin-top:0">Overview</h2>
+  <table><thead><tr><th>Task</th><th>Status</th><th>Words</th></tr></thead><tbody id="ovBody"></tbody></table>
+  <div class="row" style="justify-content:flex-start">
+    <button id="saveFileBtn">Save progress file</button>
+    <button id="copyBtn">Copy answer file</button>
+  </div>
+  <div class="row"><button id="closeOv">Close</button></div>
+</dialog>
+
+<dialog id="confirm">
+  <h2 style="margin-top:0">Submit your exam?</h2>
+  <p id="confirmText"></p>
+  <p class="meta">After submitting you cannot change these answers. Later improvements are saved as separate versions so you can compare them with the original.</p>
+  <div class="row"><button id="cancelSubmit">Keep working</button><button class="primary" id="doSubmit">Submit</button></div>
+</dialog>
+
+<script>
+"use strict";
+const EXAM = /*__EXAM_DATA__*/null;
+const KEY = "english-examiner:" + EXAM.attempt_id;
+const $ = (id) => document.getElementById(id);
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; } },
+  set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); return true; } catch (e) { return false; } }
+};
+const words = (t) => (t.match(/[A-Za-zÀ-ÿ0-9]+(?:['’-][A-Za-zÀ-ÿ0-9]+)*/g) || []).length;
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let state = store.get() || {
+  exam_id: EXAM.exam_id, attempt_id: EXAM.attempt_id, answers: {}, current: EXAM.tasks[0].number,
+  timed: true, started_at: null, elapsed_ms: 0, paused_ms: 0, pauses: 0, overtime_ms: 0, submitted: false, submitted_at: null
+};
+EXAM.tasks.forEach(t => { if (!(t.number in state.answers)) state.answers[t.number] = ""; });
+let running = false, tickStart = 0, pausedAt = 0, timer = null, storageOk = true;
+
+function persist() {
+  storageOk = store.set(state);
+  $("saved").textContent = storageOk ? "Saved " + new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : "Not saved: storage blocked";
+  if (!storageOk) notice("This browser blocks local storage. Save a progress file regularly so you do not lose work.");
+}
+function notice(msg) { const n = $("notice"); n.textContent = msg; n.classList.toggle("on", !!msg); }
+
+function elapsed() { return state.elapsed_ms + (running ? Date.now() - tickStart : 0); }
+function fmt(ms) {
+  const s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(sec).padStart(2, "0");
+}
+function renderTimer() {
+  const el = $("timer"), limit = EXAM.duration_minutes * 60000, e = elapsed();
+  if (!state.timed) { el.textContent = fmt(e); el.title = "Elapsed (untimed)"; el.className = "timer"; return; }
+  const left = limit - e;
+  el.className = "timer" + (left <= 0 ? " over" : left < 10 * 60000 ? " low" : "");
+  el.textContent = left > 0 ? fmt(left) : "+" + fmt(-left);
+  el.title = left > 0 ? "Time remaining" : "Over time";
+  if (left <= 0 && !state.time_up_notified) {
+    state.time_up_notified = true; persist();
+    notice("Time is up. In a real exam you would stop now. You may finish, but the extra time is recorded as overtime.");
+  }
+}
+function startClock() { if (running || state.submitted) return; running = true; tickStart = Date.now();
+  timer = setInterval(() => { renderTimer(); }, 1000); renderTimer(); }
+function stopClock() { if (!running) return; state.elapsed_ms += Date.now() - tickStart; running = false; clearInterval(timer); renderTimer(); }
+
+function sourceHtml(s) {
+  let h = "<h4>" + esc(s.title) + "</h4>";
+  if (s.label) h += '<div class="label">' + esc(s.label) + "</div>";
+  if (s.citation) {
+    const c = s.citation;
+    h += '<div class="cite">' + esc([c.author, c.title, c.publication, c.date].filter(Boolean).join(", ")) +
+      (c.adapted ? " (adapted)" : "") + (c.url ? ' · <a href="' + esc(c.url) + '" target="_blank" rel="noopener">source</a>' : "") + "</div>";
+  }
+  if (s.line_numbered !== false) {
+    const lines = s.text.split("\n");
+    h += '<div class="lines">' + lines.map(l => l.trim() ? "<p>" + esc(l) + "</p>" : '<p class="blank">&nbsp;</p>').join("") + "</div>";
+  } else {
+    h += '<div class="plain">' + s.text.split(/\n\s*\n/).map(p => "<p>" + esc(p) + "</p>").join("") + "</div>";
+  }
+  return h;
+}
+function task(n) { return EXAM.tasks.find(t => t.number === n); }
+function statusOf(n) { const w = words(state.answers[n] || ""); return w === 0 ? "" : "started"; }
+
+function renderNav() {
+  $("taskNav").innerHTML = EXAM.tasks.map(t => {
+    const st = statusOf(t.number);
+    return '<button data-n="' + esc(t.number) + '" aria-current="' + (t.number === state.current) + '">' +
+      '<span class="dot ' + st + '" aria-hidden="true"></span>Task ' + esc(t.number) +
+      (t.points != null ? " · " + esc(t.points) + " P" : "") + "</button>";
+  }).join("");
+  $("taskNav").querySelectorAll("button").forEach(b => b.onclick = () => showTask(b.dataset.n));
+}
+function renderWc() {
+  const t = task(state.current), w = words($("answer").value), el = $("wcTarget");
+  $("wc").textContent = w + (w === 1 ? " word" : " words");
+  el.textContent = ""; el.className = "";
+  if (t.expected_length && (t.expected_length.unit || "words") === "words") {
+    const {min, max} = t.expected_length;
+    el.textContent = "Expected: " + (min && max ? min + "–" + max : max ? "up to " + max : "at least " + min) + " words";
+    if ((max && w > max * 1.1) || (min && w > 0 && w < min * 0.9)) el.className = "out";
+  }
+}
+function showTask(n) {
+  state.current = n; const t = task(n);
+  $("taskText").innerHTML = '<span class="num">' + esc(t.number) + ".</span>" + esc(t.instruction).replace(/\n/g, "<br>") +
+    '<div class="hint">' + [t.suggested_minutes ? "Suggested time: " + t.suggested_minutes + " min" : "",
+      t.points != null ? t.points + " points" : "", t.expected_length && t.expected_length.note ? esc(t.expected_length.note) : ""]
+      .filter(Boolean).join(" · ") + "</div>";
+  const a = $("answer"); a.value = state.answers[n] || ""; a.readOnly = state.submitted;
+  const sel = $("srcSelect"), ids = (t.source_ids && t.source_ids.length) ? t.source_ids : EXAM.sources.map(s => s.id);
+  if (EXAM.sources.length) {
+    if (!ids.includes(sel.value)) sel.value = ids[0];
+    $("source").innerHTML = sourceHtml(EXAM.sources.find(s => s.id === sel.value) || EXAM.sources[0]);
+  } else { $("srcPane").style.display = "none"; }
+  renderNav(); renderWc(); persist();
+}
+
+function exportData() {
+  const total = elapsed();
+  return {
+    format: "english-examiner/answers@1", exam_id: EXAM.exam_id, attempt_id: EXAM.attempt_id,
+    submitted: state.submitted, answers: state.answers,
+    timing: { timed: state.timed, duration_minutes: EXAM.duration_minutes, started_at: state.started_at,
+      elapsed_seconds: Math.round(total / 1000), paused_seconds: Math.round(state.paused_ms / 1000), pauses: state.pauses,
+      overtime_seconds: state.timed ? Math.max(0, Math.round((total - EXAM.duration_minutes * 60000) / 1000)) : 0,
+      submitted_at: state.submitted_at }
+  };
+}
+function download() {
+  const blob = new Blob([JSON.stringify(exportData(), null, 2)], {type: "application/json"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "answers-" + EXAM.attempt_id + ".json"; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+async function copy(btn) {
+  const text = JSON.stringify(exportData());
+  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; }
+  catch (e) { const pre = document.createElement("pre"); pre.className = "export"; pre.textContent = text; btn.after(pre); btn.textContent = "Select the text below"; }
+  setTimeout(() => btn.textContent = "Copy answer file", 2500);
+}
+
+function enterRoom() {
+  $("start").style.display = "none"; $("room").classList.add("on");
+  ["pauseBtn", "overviewBtn", "submitBtn"].forEach(id => $(id).hidden = false);
+  $("srcSelect").innerHTML = EXAM.sources.map(s => '<option value="' + esc(s.id) + '">' + esc(s.id + " · " + s.title) + "</option>").join("");
+  showTask(state.current); if (state.submitted) finish(); else startClock();
+}
+function finish() {
+  stopClock(); $("answer").readOnly = true; $("pauseBtn").hidden = true; $("submitBtn").hidden = true;
+  $("doneBox").classList.add("on"); $("doneBox").scrollIntoView({behavior: "smooth"});
+}
+
+$("title").textContent = EXAM.title;
+$("startTitle").textContent = EXAM.title;
+$("startMeta").textContent = [EXAM.exam_type, EXAM.topic, EXAM.duration_minutes + " minutes", EXAM.tasks.length + " task" + (EXAM.tasks.length > 1 ? "s" : ""),
+  EXAM.total_points != null ? EXAM.total_points + " points" + (EXAM.marking_label ? " (" + EXAM.marking_label + ")" : "") : ""].filter(Boolean).join(" · ");
+$("general").innerHTML = EXAM.general_instructions ? "<p>" + esc(EXAM.general_instructions).replace(/\n/g, "<br>") + "</p>" : "";
+$("resources").innerHTML = (EXAM.permitted_resources.length ? EXAM.permitted_resources : ["None stated"]).map(r => "<li>" + esc(r) + "</li>").join("");
+if (state.started_at) { $("beginBtn").textContent = state.submitted ? "View submitted exam" : "Continue exam"; }
+document.querySelector('input[value="untimed"]').checked = !state.timed;
+
+$("beginBtn").onclick = () => {
+  if (!state.started_at) { state.timed = document.querySelector('input[name="timing"]:checked').value === "timed"; state.started_at = new Date().toISOString(); }
+  enterRoom();
+};
+$("loadBtn").onclick = () => $("loadFile").click();
+$("loadFile").onchange = async (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (d.exam_id !== EXAM.exam_id || d.attempt_id !== EXAM.attempt_id) throw new Error("This file belongs to a different exam attempt.");
+    state.answers = Object.assign(state.answers, d.answers || {});
+    if (d.timing) { state.timed = d.timing.timed; state.elapsed_ms = (d.timing.elapsed_seconds || 0) * 1000; state.paused_ms = (d.timing.paused_seconds || 0) * 1000; state.started_at = d.timing.started_at || new Date().toISOString(); }
+    state.submitted = !!d.submitted; persist(); enterRoom();
+  } catch (e) { alert("Could not load progress: " + e.message); }
+};
+let typing = null;
+$("answer").addEventListener("input", (e) => {
+  state.answers[state.current] = e.target.value; renderWc();
+  clearTimeout(typing); typing = setTimeout(() => { persist(); renderNav(); }, 600);
+});
+$("srcSelect").onchange = () => { $("source").innerHTML = sourceHtml(EXAM.sources.find(s => s.id === $("srcSelect").value)); };
+$("toggleSrc").onclick = () => { const p = $("srcPane"); p.classList.toggle("collapsed"); const c = p.classList.contains("collapsed");
+  $("toggleSrc").textContent = c ? "Show" : "Hide"; $("toggleSrc").setAttribute("aria-expanded", String(!c)); };
+$("pauseBtn").onclick = () => { stopClock(); pausedAt = Date.now(); state.pauses++; persist(); $("veil").classList.add("on"); };
+$("resumeBtn").onclick = () => { state.paused_ms += Date.now() - pausedAt; $("veil").classList.remove("on"); persist(); startClock(); };
+$("overviewBtn").onclick = () => {
+  $("ovBody").innerHTML = EXAM.tasks.map(t => { const w = words(state.answers[t.number] || "");
+    return "<tr><td>Task " + esc(t.number) + "</td><td>" + (w ? "Started" : "Not started") + "</td><td>" + w + "</td></tr>"; }).join("");
+  $("overview").showModal();
+};
+$("closeOv").onclick = () => $("overview").close();
+$("saveFileBtn").onclick = download;
+$("copyBtn").onclick = (e) => copy(e.currentTarget);
+$("submitBtn").onclick = () => {
+  const empty = EXAM.tasks.filter(t => !words(state.answers[t.number] || "")).map(t => t.number);
+  $("confirmText").textContent = empty.length ? "Unanswered: task " + empty.join(", ") + "." : "All tasks have an answer.";
+  $("confirm").showModal();
+};
+$("cancelSubmit").onclick = () => $("confirm").close();
+$("doSubmit").onclick = () => {
+  state.answers[state.current] = $("answer").value; stopClock();
+  state.submitted = true; state.submitted_at = new Date().toISOString(); persist(); $("confirm").close(); finish();
+};
+$("dlDone").onclick = download;
+$("copyDone").onclick = (e) => copy(e.currentTarget);
+document.addEventListener("visibilitychange", () => { if (document.hidden && running) { state.elapsed_ms += Date.now() - tickStart; tickStart = Date.now(); persist(); } });
+window.addEventListener("beforeunload", () => { if (running) { state.elapsed_ms += Date.now() - tickStart; tickStart = Date.now(); } store.set(state); });
+renderTimer();
+</script>
+</body>
+</html>
