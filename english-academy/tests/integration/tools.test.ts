@@ -81,7 +81,7 @@ describe("batch enrichment", () => {
     const r = await enrichBatch(db, u.bob.id, ids);
     expect(r.enriched).toEqual(ids.slice(0, 2));
     expect(r.stopped).toMatchObject({ code: "quota" });
-    expect(r.stopped!.message).toMatch(/vocabulary exercises/);
+    expect(r.stopped!.message).toMatch(/exercises, word help/);
     expect(r.remaining).toEqual(ids.slice(2));
     expect(structured).toHaveBeenCalledTimes(2);
     const first = await getEntry(db, u.bob.id, ids[0]);
