@@ -119,9 +119,9 @@ export function AssessmentReport({ id }: { id: string }) {
                 <ul className="mt-2 divide-y divide-line text-sm">
                   {a.dimensions.filter((x) => x.applicable).map((x, i) => (
                     <li key={i} className="flex flex-wrap items-start gap-2 py-2">
-                      <span className="w-52 shrink-0 font-medium">{DIMENSION_LABEL[x.key]}{x.task ? ` (task ${x.task})` : ""}</span>
+                      <span className="font-medium sm:w-52 sm:shrink-0">{DIMENSION_LABEL[x.key]}{x.task ? ` (task ${x.task})` : ""}</span>
                       <Badge tone={LEVEL_TONE[x.level]}>{x.level.replace("_", " ")}</Badge>
-                      <span className="min-w-0 flex-1 text-ink-2">{x.comment}</span>
+                      <span className="w-full text-ink-2 sm:w-auto sm:min-w-0 sm:flex-1">{x.comment}</span>
                     </li>
                   ))}
                 </ul>

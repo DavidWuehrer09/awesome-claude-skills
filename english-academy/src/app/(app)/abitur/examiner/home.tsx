@@ -200,7 +200,7 @@ function Materials() {
             {rows.map((m) => (
               <li key={m.id} className="px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Link href={`/abitur/examiner/materials/${m.id}`} className="min-w-0 flex-1 truncate font-medium hover:underline">{m.labels.title || m.filename}</Link>
+                  <Link href={`/abitur/examiner/materials/${m.id}`} className="min-w-0 basis-full truncate font-medium hover:underline sm:basis-0 sm:flex-1">{m.labels.title || m.filename}</Link>
                   <DocTypeBadge m={m} />
                   <Badge tone={m.extractionStatus === "reviewed" ? "sage" : "warn"}>{STATUS_LABEL[m.extractionStatus]}</Badge>
                 </div>
