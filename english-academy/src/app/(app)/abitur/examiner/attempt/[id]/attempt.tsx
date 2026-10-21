@@ -176,6 +176,18 @@ function ExamRoom({ data, onSubmitted }: { data: AttemptData; onSubmitted: () =>
           {state === "saved" ? <><Check className="inline size-3.5" aria-hidden /> saved</> : state === "saving" ? "saving…" : state === "offline" ? <><CloudOff className="inline size-3.5" aria-hidden /> offline, kept on this device</> : state === "conflict" ? "" : "unsaved"}
         </span>
         <Button size="sm" variant="primary" onClick={submit} loading={submitting}><Send className="size-4" aria-hidden /> Submit</Button>
+        <nav aria-label="Tasks" className="flex w-full flex-wrap gap-1.5">
+          {view.tasks.map((t) => {
+            const words = wordCount(answers[t.number] ?? "");
+            const min = t.expectedLength?.unit === "words" ? t.expectedLength.min : null;
+            const state = !words ? "empty" : min && words < min * 0.9 ? "started" : "done";
+            return (
+              <a key={t.number} href={`#task-${t.number}`} className={clsx("rounded-full border px-2.5 py-0.5 text-xs", state === "done" ? "border-sage bg-sage-soft text-sage" : state === "started" ? "border-warn bg-warn-soft text-warn" : "border-line-strong text-ink-2")}>
+                Task {t.number}: {state === "empty" ? "not started" : state === "started" ? `${words} words` : <>{words} words <Check className="inline size-3" aria-hidden /></>}
+              </a>
+            );
+          })}
+        </nav>
       </div>
       {state === "conflict" && (
         <div className="mb-4"><Notice tone="warn" title="Saved on another device">This exam was changed elsewhere. <button className="underline" onClick={resolveConflict}>Keep the answers on this device</button> or <button className="underline" onClick={() => location.reload()}>load the other version</button>.</Notice></div>
@@ -187,7 +199,7 @@ function ExamRoom({ data, onSubmitted }: { data: AttemptData; onSubmitted: () =>
         <div className="lg:sticky lg:top-16 lg:self-start"><Sources view={view} /></div>
         <div className="space-y-4">
           {view.tasks.map((t) => (
-            <Card key={t.number}>
+            <div key={t.number} id={`task-${t.number}`} className="scroll-mt-32"><Card>
               <div className="flex items-start gap-2">
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-navy text-sm text-navy-ink">{t.number}</span>
                 <p className="min-w-0 flex-1 font-medium">{t.instruction}</p>
@@ -198,7 +210,7 @@ function ExamRoom({ data, onSubmitted }: { data: AttemptData; onSubmitted: () =>
                 {lengthHint(t, wordCount(answers[t.number] ?? "")) ?? <span className="text-ink-3">{wordCount(answers[t.number] ?? "")} words</span>}
                 {t.suggestedMinutes && <span className="text-ink-3">suggested {t.suggestedMinutes} min</span>}
               </div>
-            </Card>
+            </Card></div>
           ))}
         </div>
       </div>
@@ -285,6 +297,9 @@ function Submitted({ data, reload }: { data: AttemptData; reload: () => void }) 
                       <ul className="list-disc pl-5">{e.expectedContent.map((c) => <li key={c}>{c}</li>)}</ul>
                       {e.acceptableAlternatives.length > 0 && <p className="text-ink-2">Also acceptable: {e.acceptableAlternatives.join("; ")}</p>}
                       {e.commonPitfalls.length > 0 && <p className="text-ink-2">Common pitfalls: {e.commonPitfalls.join("; ")}</p>}
+                      {view.criteria.filter((c) => c.task === t.number).length > 0 && (
+                        <p className="text-ink-2">Marks: {view.criteria.filter((c) => c.task === t.number).map((c) => `${c.criterion}${c.points != null ? ` (${c.points} P)` : ""}`).join("; ")}</p>
+                      )}
                     </div>
                   ))}
                 </details>

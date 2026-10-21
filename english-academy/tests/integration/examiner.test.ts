@@ -226,3 +226,78 @@ describe("exam lifecycle", () => {
     expect(await ex.listExams(db, users.bob.id)).toEqual([]);
   });
 });
+
+describe("lab, drills, explanations, results and export", () => {
+  const usage = { model: "claude-opus-5-5", inputTokens: 10, outputTokens: 10 };
+  const real = () => {
+    vi.stubEnv("AI_PROVIDER", "anthropic");
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-test-placeholder");
+  };
+  const labItem = (original: string) => ({
+    task: "lab", original, level1Correct: "Cities should limit cars.", level2Stronger: "Cities should restrict car traffic in their centres.", level3HighLevel: null,
+    explanation: { effective: "Precise verb.", nuance: "restrict vs ban", improves: ["language"], whyInContext: "Formal comment.", risks: "" },
+    exercise: { instruction: "Rewrite: Cars are bad.", material: null, answerKey: null },
+  });
+
+  it("only accepts lab passages that are really in the student's text", async () => {
+    real();
+    structured.mockResolvedValue({ data: { items: [labItem("Cars should be gone from cities.")], overall: "Be precise." }, usage });
+    await expect(ex.runLab(db, users.alice.id, { text: "I think cars are bad for cities and should go." })).rejects.toMatchObject({ code: "invalid_output" });
+    structured.mockReset();
+    structured.mockResolvedValue({ data: { items: [labItem("cars are bad for cities")], overall: "Be precise." }, usage });
+    const r = await ex.runLab(db, users.alice.id, { text: "I think cars are bad for cities and should go." });
+    expect(r.items).toHaveLength(1);
+  });
+
+  it("is honest in demo mode instead of inventing rewrites", async () => {
+    vi.stubEnv("AI_PROVIDER", "demo");
+    const r = await ex.runLab(db, users.alice.id, { text: "I think cars are bad for cities and should go." });
+    expect(r).toMatchObject({ items: [], demo: true });
+  });
+
+  it("offers built-in drills for chosen skills without an AI provider", async () => {
+    vi.stubEnv("AI_PROVIDER", "demo");
+    const r = await ex.generateDrills(db, users.alice.id, ["register_slips", "grammar_errors"]);
+    expect(r.drills.map((d) => d.skill)).toEqual(["register_slips", "grammar_errors"]);
+    expect(r.drills[0].checklist.length).toBeGreaterThan(0);
+  });
+
+  it("explains a comment on request", async () => {
+    vi.stubEnv("AI_PROVIDER", "demo");
+    const a = (await ex.getAttempt(db, users.alice.id, attemptId)).assessments.find((x) => x.status === "complete")!;
+    const r = await ex.explainComment(db, users.alice.id, a.id, "c1");
+    expect(r.explanation).toMatch(/Demo mode|register|contraction/i);
+    await expect(ex.explainComment(db, users.bob.id, a.id, "c1")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("lists results and exports without the original file bytes", async () => {
+    const results = await ex.listAttempts(db, users.alice.id);
+    expect(results.some((r) => r.id === attemptId && r.versions === 2 && r.assessments.length >= 1)).toBe(true);
+    expect(await ex.listAttempts(db, users.bob.id)).toEqual([]);
+    const out = await ex.exportExaminer(db, users.alice.id);
+    expect(out.materials.length).toBeGreaterThan(0);
+    expect(JSON.stringify(out)).not.toContain('"type":"Buffer"');
+    expect(Object.keys(out.materials[0])).not.toContain("original");
+    expect(out.materials[0].originalFile).toMatch(/\/original$/);
+  });
+
+  it("saves a valid AI-generated exam and rejects one that claims to be authentic", async () => {
+    real();
+    const exam = {
+      title: "Practice Klausur: Rural life", topic: "Rural life", examType: "Klausur", difficulty: "realistic", durationMinutes: 90, permittedResources: [], generalInstructions: "",
+      sources: [{ id: "S1", title: "The Bus Stop", kind: "fictional_practice", label: "Fictional practice text written for this exam", materialId: null, lineNumbered: true, text: "Every morning the bus came later, and every morning Mia pretended not to mind. The village had shrunk around her like a coat washed too often.", citation: null }],
+      tasks: [{ number: "1", type: "summary", operator: "Outline", instruction: "Outline Mia's situation in about 100 words.", sourceIds: ["S1"], expectedLength: { min: 80, max: 120, unit: "words" }, suggestedMinutes: 30, points: null }],
+      marking: { origin: "none", label: "", totalPoints: null, sourceMaterialIds: [], criteria: [] },
+      hidden: { taskExpectations: [{ task: "1", expectedContent: ["Mia's routine", "the shrinking village"], acceptableAlternatives: [], markingNotes: "", commonPitfalls: [] }], vocabularyTargets: [], weaknessTargets: [] },
+      provenance: { formatBasedOn: [examPaperId], profileEntriesUsed: [], notes: "Format of your Schulaufgabe.", assumptions: [], conflicts: [] },
+    };
+    structured.mockResolvedValue({ data: exam, usage });
+    const ok = await ex.generateExam(db, users.alice.id, { referenceExamIds: [examPaperId] });
+    expect(ok.demo).toBe(false);
+    structured.mockReset();
+    const fake = structuredClone(exam);
+    fake.sources[0] = { ...fake.sources[0], kind: "authentic", citation: { author: "A. Writer", title: "T", publication: "The Times", date: "2024", url: null, adapted: false, verified: true } } as never;
+    structured.mockResolvedValue({ data: fake, usage });
+    await expect(ex.generateExam(db, users.alice.id, { referenceExamIds: [examPaperId] })).rejects.toMatchObject({ code: "invalid_output" });
+  });
+});

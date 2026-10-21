@@ -17,7 +17,7 @@ export function MaterialReview({ id }: { id: string }) {
   const [m, setM] = useState<Material | null>(null);
   const [text, setText] = useState("");
   const [docType, setDocType] = useState<DocType | "">("");
-  const [labels, setLabels] = useState({ title: "", topic: "", examType: "", yearLevel: "", date: "" });
+  const [labels, setLabels] = useState({ title: "", topic: "", examType: "", yearLevel: "", date: "", importance: "" });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +25,7 @@ export function MaterialReview({ id }: { id: string }) {
     setM(x);
     setText(x.text);
     setDocType(x.docType ?? "");
-    setLabels({ title: x.labels.title ?? "", topic: x.labels.topic.join(", "), examType: x.labels.examType ?? "", yearLevel: x.labels.yearLevel ?? "", date: x.labels.date ?? "" });
+    setLabels({ title: x.labels.title ?? "", topic: x.labels.topic.join(", "), examType: x.labels.examType ?? "", yearLevel: x.labels.yearLevel ?? "", date: x.labels.date ?? "", importance: x.labels.importance ?? "" });
   }, []);
   useEffect(() => {
     api<{ material: Material }>(`/api/examiner/materials/${id}`).then((r) => apply(r.material)).catch((e) => setError(errorMessage(e)));
@@ -130,8 +130,13 @@ export function MaterialReview({ id }: { id: string }) {
               <Field label="Topics" htmlFor="l-top" hint="Comma-separated"><Input id="l-top" value={labels.topic} onChange={(e) => setLabels({ ...labels, topic: e.target.value })} /></Field>
               <Field label="Exam type" htmlFor="l-e"><Input id="l-e" value={labels.examType} onChange={(e) => setLabels({ ...labels, examType: e.target.value })} placeholder="Schulaufgabe, Klausur…" /></Field>
               <Field label="Year level" htmlFor="l-y"><Input id="l-y" value={labels.yearLevel} onChange={(e) => setLabels({ ...labels, yearLevel: e.target.value })} /></Field>
+              <Field label="Importance" htmlFor="l-i">
+                <Select id="l-i" value={labels.importance} onChange={(e) => setLabels({ ...labels, importance: e.target.value })}>
+                  <option value="">Normal</option><option value="essential">Essential</option><option value="high">High</option><option value="low">Low</option>
+                </Select>
+              </Field>
               <Field label="Date" htmlFor="l-d"><Input id="l-d" type="date" value={labels.date} onChange={(e) => setLabels({ ...labels, date: e.target.value })} /></Field>
-              <Button size="sm" loading={busy === "labels"} onClick={() => patch({ labels: { title: labels.title, topic: labels.topic.split(",").map((s) => s.trim()).filter(Boolean), examType: labels.examType, yearLevel: labels.yearLevel, date: labels.date } }, "labels")}>Save labels</Button>
+              <Button size="sm" loading={busy === "labels"} onClick={() => patch({ labels: { title: labels.title, topic: labels.topic.split(",").map((s) => s.trim()).filter(Boolean), examType: labels.examType, yearLevel: labels.yearLevel, date: labels.date, importance: labels.importance || "normal" } }, "labels")}>Save labels</Button>
             </div>
           </Card>
           <Card>

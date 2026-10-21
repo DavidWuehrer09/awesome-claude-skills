@@ -19,6 +19,8 @@ export default defineConfig({
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 900 } }, testIgnore: /mobile\.spec\.ts/ },
     { name: "iphone", use: { ...devices["iPhone 13"], defaultBrowserType: "chromium" }, testMatch: /mobile\.spec\.ts/ },
+    // Tablet layout (iPad size and touch); runs the same small-screen checks.
+    { name: "ipad", use: { ...devices["iPad Pro 11"], defaultBrowserType: "chromium" }, testMatch: /mobile\.spec\.ts/ },
   ],
   webServer: {
     // Requires `next build` first (npm run test:e2e does both).

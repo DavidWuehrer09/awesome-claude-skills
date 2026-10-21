@@ -142,6 +142,8 @@ export const examSchema = z.object({
     profileEntriesUsed: z.array(z.string()),
     notes: z.string(),
     assumptions: z.array(z.string()),
+    /** Where the format of the learner's old exams differs from verified official guidance. */
+    conflicts: z.array(z.string()),
   }),
 });
 export type Exam = z.infer<typeof examSchema>;
@@ -177,6 +179,9 @@ export function studentView(exam: Exam) {
     generalInstructions: exam.generalInstructions,
     totalPoints: exam.marking.totalPoints,
     markingLabel: exam.marking.totalPoints != null ? exam.marking.label : null,
+    markingOrigin: exam.marking.origin,
+    // How marks are allocated is shown, as on a printed exam; the hidden marking notes are not.
+    criteria: exam.marking.criteria,
     sources: exam.sources.map((s) => ({
       id: s.id, title: s.title, kind: s.kind, label: s.label, lineNumbered: s.lineNumbered, text: s.text,
       citation: s.citation ? { author: s.citation.author, title: s.citation.title, publication: s.citation.publication, date: s.citation.date, url: s.citation.url, adapted: s.citation.adapted } : null,

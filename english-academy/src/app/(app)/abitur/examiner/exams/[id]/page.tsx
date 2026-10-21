@@ -11,7 +11,7 @@ import { api, errorMessage } from "@/lib/api";
 
 type Overview = {
   id: string; isDemo: boolean; createdAt: string; view: StudentExam; validation: { warnings: string[] };
-  provenance: { notes: string; assumptions: string[]; formatBasedOn: number }; markingOrigin: string;
+  provenance: { notes: string; assumptions: string[]; conflicts: string[]; formatBasedOn: number }; markingOrigin: string;
 };
 type ExamListRow = { id: string; attempts: { id: string; status: string; createdAt: string }[] };
 
@@ -63,10 +63,18 @@ export default function ExamOverviewPage() {
             <p className="mt-3 text-sm text-ink-2">Task types: {v.tasks.map((t) => t.type.replace(/_/g, " ")).join(", ")}. The tasks and texts are shown when you start, as in a real exam.</p>
             {v.permittedResources.length > 0 && <p className="mt-2 text-sm">Allowed: {v.permittedResources.join(", ")}</p>}
           </Card>
+          {v.criteria.length > 0 && (
+            <Card>
+              <h2 className="text-base font-semibold">How marks are allocated</h2>
+              <p className="mt-1 text-xs text-ink-3">{v.markingOrigin === "teacher_provided" ? "From your teacher's document." : v.markingOrigin === "official" ? "From official guidance." : "Practice scheme made by the AI, not your teacher's."}</p>
+              <ul className="mt-2 space-y-1 text-sm">{v.criteria.map((c, i) => <li key={i}><span className="text-ink-3">Task {c.task}:</span> {c.criterion}{c.points != null && <span className="text-ink-2"> ({c.points} P)</span>}</li>)}</ul>
+            </Card>
+          )}
           <Card>
             <h2 className="text-base font-semibold">How this exam was made</h2>
             <p className="mt-1 text-sm text-ink-2">{o.provenance.notes || "Original practice exam."}</p>
             {o.provenance.formatBasedOn > 0 && <p className="mt-1 text-sm">Format follows {o.provenance.formatBasedOn} of your previous exams.</p>}
+            {o.provenance.conflicts.length > 0 && <div className="mt-3"><Notice tone="warn" title="Your old exams differ from official guidance"><ul className="list-disc pl-5">{o.provenance.conflicts.map((c) => <li key={c}>{c}</li>)}</ul><p className="mt-1">Ask your teacher which format applies to you.</p></Notice></div>}
             {o.provenance.assumptions.length > 0 && <><h3 className="mt-3 text-sm font-medium">Assumptions</h3><ul className="mt-1 list-disc pl-5 text-sm text-ink-2">{o.provenance.assumptions.map((a) => <li key={a}>{a}</li>)}</ul></>}
             {o.validation.warnings.length > 0 && <div className="mt-3"><Notice tone="warn" title="Checks"><ul className="list-disc pl-5">{o.validation.warnings.map((w) => <li key={w}>{w}</li>)}</ul></Notice></div>}
             <p className="mt-3 text-xs text-ink-3">This is an original practice exam, not an official paper.</p>

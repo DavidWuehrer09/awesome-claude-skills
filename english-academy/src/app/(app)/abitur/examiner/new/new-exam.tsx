@@ -20,7 +20,7 @@ export function NewExam({ initialDifficulty }: { initialDifficulty: Difficulty }
   const router = useRouter();
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
   const [f, setF] = useState({
-    topics: "", examType: "Klausur", difficulty: initialDifficulty, durationMinutes: 90, taskCount: 3, targetWords: "",
+    topics: "", examType: "Klausur", difficulty: initialDifficulty, mode: "practice" as "practice" | "challenging" | "mock", durationMinutes: 90, taskCount: 3, targetWords: "",
     referenceExamIds: [] as string[], sourceMaterialIds: [] as string[], followReferenceClosely: "",
     includeVocabulary: true, focusWeaknesses: true, matchTeacherFormat: true, notes: "",
   });
@@ -32,6 +32,14 @@ export function NewExam({ initialDifficulty }: { initialDifficulty: Difficulty }
   const toggle = (key: "referenceExamIds" | "sourceMaterialIds", id: string) =>
     setF({ ...f, [key]: f[key].includes(id) ? f[key].filter((x) => x !== id) : [...f[key], id] });
 
+  // Missing information is shown as labelled defaults before generating, not discovered afterwards.
+  const assumptions = [
+    ...(f.referenceExamIds.length ? [] : ["No previous exam selected: a general Bavarian upper-school format is used, not your teacher's."]),
+    ...(f.topics.trim() ? [] : ["No topic given: the AI picks one from your vocabulary and weaknesses."]),
+    ...(f.durationMinutes === 90 ? ["Time: 90 minutes (default)."] : []),
+    ...(f.targetWords ? [] : ["Answer length: set per task by the AI to match the time."]),
+  ];
+
   const create = async () => {
     setBusy(true);
     setError(null);
@@ -39,7 +47,7 @@ export function NewExam({ initialDifficulty }: { initialDifficulty: Difficulty }
       const r = await api<{ id: string }>("/api/examiner/exams", {
         method: "POST",
         json: {
-          topics: f.topics.split(",").map((t) => t.trim()).filter(Boolean), examType: f.examType, difficulty: f.difficulty,
+          topics: f.topics.split(",").map((t) => t.trim()).filter(Boolean), examType: f.examType, difficulty: f.difficulty, mode: f.mode,
           durationMinutes: f.durationMinutes, taskCount: f.taskCount, targetWords: f.targetWords ? Number(f.targetWords) : null,
           referenceExamIds: f.referenceExamIds, sourceMaterialIds: f.sourceMaterialIds,
           followReferenceClosely: f.followReferenceClosely || null, includeVocabulary: f.includeVocabulary,
@@ -65,6 +73,11 @@ export function NewExam({ initialDifficulty }: { initialDifficulty: Difficulty }
               <Field label="Exam type" htmlFor="b-type"><Input id="b-type" value={f.examType} onChange={(e) => setF({ ...f, examType: e.target.value })} /></Field>
               <Field label="Difficulty" htmlFor="b-diff" hint={DIFFICULTY_HELP[f.difficulty]}>
                 <Select id="b-diff" value={f.difficulty} onChange={(e) => setF({ ...f, difficulty: e.target.value as Difficulty })}>{DIFFICULTIES.map((d) => <option key={d} value={d}>{DIFFICULTY_LABEL[d]}</option>)}</Select>
+              </Field>
+              <Field label="Mode" htmlFor="b-mode" hint={{ practice: "Realistic tasks; you can pause and see your progress.", challenging: "Harder sources and stricter expectations than usual.", mock: "Full mock exam: timed, no pauses intended, marked strictly." }[f.mode]}>
+                <Select id="b-mode" value={f.mode} onChange={(e) => setF({ ...f, mode: e.target.value as typeof f.mode })}>
+                  <option value="practice">Practice</option><option value="challenging">Challenging</option><option value="mock">Mock exam</option>
+                </Select>
               </Field>
               <Field label="Time (minutes)" htmlFor="b-min"><Input id="b-min" type="number" min={15} max={330} value={f.durationMinutes} onChange={(e) => setF({ ...f, durationMinutes: Number(e.target.value) })} /></Field>
               <Field label="Number of tasks" htmlFor="b-n"><Input id="b-n" type="number" min={1} max={5} value={f.taskCount} onChange={(e) => setF({ ...f, taskCount: Number(e.target.value) })} /></Field>
@@ -102,6 +115,12 @@ export function NewExam({ initialDifficulty }: { initialDifficulty: Difficulty }
               <Toggle checked={f.includeVocabulary} onChange={(v) => setF({ ...f, includeVocabulary: v })} label="Use my vocabulary" description="Tasks where your current words fit naturally." />
             </div>
           </Card>
+          {assumptions.length > 0 && (
+            <Notice tone="warn" title="Assumptions for this exam">
+              <ul className="list-disc pl-5">{assumptions.map((a) => <li key={a}>{a}</li>)}</ul>
+              <p className="mt-1">Change the fields above if any of these are wrong.</p>
+            </Notice>
+          )}
           {error && <Notice tone="danger" title={error.message}>{error.details.length > 0 && <ul className="list-disc pl-5">{error.details.map((d) => <li key={d}>{d}</li>)}</ul>}</Notice>}
           <Button variant="primary" size="lg" className="w-full" loading={busy} onClick={create}><Sparkles className="size-4" aria-hidden /> Create exam</Button>
           {busy && <p className="text-center text-xs text-ink-3">Writing and checking your exam. This can take a minute.</p>}

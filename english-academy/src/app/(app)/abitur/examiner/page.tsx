@@ -2,7 +2,7 @@ import { ExaminerHome, type Tab } from "./home";
 
 export const metadata = { title: "My English Examiner" };
 
-const TABS: Tab[] = ["overview", "materials", "profile", "exams", "weaknesses"];
+const TABS: Tab[] = ["overview", "materials", "profile", "exams", "results", "weaknesses"];
 
 export default async function ExaminerPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab } = await searchParams;

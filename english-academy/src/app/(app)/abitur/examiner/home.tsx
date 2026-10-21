@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, FileUp, GraduationCap, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { ExternalLink, FileUp, GraduationCap, Pencil, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -12,7 +12,7 @@ import { CONFIDENCE, DOC_TYPE_LABEL, DOC_TYPES, type DocType, PROFILE_SECTIONS, 
 import { STATUS_LABEL as WEAKNESS_STATUS, type WeaknessStatus } from "@/domain/examiner/weaknesses";
 import { api, ApiError, errorMessage } from "@/lib/api";
 
-export type Tab = "overview" | "materials" | "profile" | "exams" | "weaknesses";
+export type Tab = "overview" | "materials" | "profile" | "exams" | "results" | "weaknesses";
 
 type ExamRow = { id: string; title: string; difficulty: keyof typeof DIFFICULTY_LABEL; isDemo: boolean; createdAt: string; topic: string; durationMinutes: number; tasks: number; attempts: { id: string; status: string; createdAt: string }[] };
 type Weak = {
@@ -20,6 +20,7 @@ type Weak = {
   results: { id: string; title: string; date: string; version: number; low: number; high: number; best: number | null; basis: string }[];
   recommendation: { difficulty: keyof typeof DIFFICULTY_LABEL; focus: { skill: string; label: string; status: WeaknessStatus }[]; drills: Record<string, number>; advice: string[]; secure: string[] };
   demoAssessments: number;
+  vocabulary: { term: string; offered: number; used: number; natural: number }[];
 };
 
 const sectionLabel = (s: string) => s.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
@@ -35,15 +36,19 @@ export function ExaminerHome({ initialTab }: { initialTab: Tab }) {
     <>
       <PageHeader eyebrow="Abitur Academy" title="My English Examiner"
         subtitle="Upload your Klausuren, rubrics and corrections, build an evidence-based profile of your course, and practise with original exams graded like a demanding teacher would."
-        actions={<LinkButton href="/abitur/examiner/new" variant="primary"><Plus className="size-4" aria-hidden /> New exam</LinkButton>} />
+        actions={<>
+          <LinkButton href="/abitur/examiner/lab"><Sparkles className="size-4" aria-hidden /> Improvement Lab</LinkButton>
+          <LinkButton href="/abitur/examiner/new" variant="primary"><Plus className="size-4" aria-hidden /> New exam</LinkButton>
+        </>} />
       <Tabs value={tab} onChange={change} className="mb-6" items={[
         { value: "overview", label: "Overview" }, { value: "materials", label: "My Materials" }, { value: "profile", label: "Course Profile" },
-        { value: "exams", label: "Exams" }, { value: "weaknesses", label: "My Weaknesses" },
+        { value: "exams", label: "Exams" }, { value: "results", label: "My Results" }, { value: "weaknesses", label: "My Weaknesses" },
       ]} />
       {tab === "overview" && <Overview go={change} />}
       {tab === "materials" && <Materials />}
       {tab === "profile" && <Profile />}
       {tab === "exams" && <Exams />}
+      {tab === "results" && <Results />}
       {tab === "weaknesses" && <Weaknesses />}
     </>
   );
@@ -124,6 +129,14 @@ function Overview({ go }: { go: (t: Tab) => void }) {
             <div><dt className="text-ink-3">Assessed results</dt><dd className="text-2xl tabular-nums">{data.weak.results.length}</dd></div>
           </dl>
         </Card>
+        <Card>
+          <h2 className="text-lg">Tools</h2>
+          <ul className="mt-2 space-y-1.5 text-sm">
+            <li><Link className="underline" href="/abitur/examiner/lab">15-Point Improvement Lab</Link>: any sentence or paragraph at three levels</li>
+            <li><Link className="underline" href="/abitur/examiner/drills">Practice drills</Link> for your recurring weaknesses</li>
+            <li><a className="underline" href="/api/examiner/export">Export all examiner data</a> (JSON)</li>
+          </ul>
+        </Card>
         <Notice title="Academic honesty">
           Exams here are original practice material, never official papers. Point estimates are indicative AI estimates on the 0–15 scale, not grades and not predictions of your teacher&apos;s marking. Do not hand in AI-written answers as your own.
         </Notice>
@@ -139,6 +152,8 @@ function Materials() {
   const [rows, setRows] = useState<MaterialRow[] | null>(null);
   const [q, setQ] = useState("");
   const [type, setType] = useState<DocType | "">("");
+  const [topicFilter, setTopicFilter] = useState("");
+  const [impFilter, setImpFilter] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [upType, setUpType] = useState<DocType | "">("");
   const [topics, setTopics] = useState("");
@@ -150,8 +165,10 @@ function Materials() {
     const p = new URLSearchParams();
     if (q.trim()) p.set("q", q.trim());
     if (type) p.set("docType", type);
+    if (topicFilter.trim()) p.set("topic", topicFilter.trim());
+    if (impFilter) p.set("importance", impFilter);
     return api<{ materials: MaterialRow[] }>(`/api/examiner/materials?${p}`).then((r) => setRows(r.materials)).catch((e) => setError(errorMessage(e)));
-  }, [q, type]);
+  }, [q, type, topicFilter, impFilter]);
   useEffect(() => {
     const t = setTimeout(() => void load(), 250);
     return () => clearTimeout(t);
@@ -190,9 +207,13 @@ function Materials() {
             <option value="">All types</option>
             {DOC_TYPES.map((t) => <option key={t} value={t}>{DOC_TYPE_LABEL[t]}</option>)}
           </Select>
+          <Input aria-label="Filter by topic" className="w-36" placeholder="Topic" value={topicFilter} onChange={(e) => setTopicFilter(e.target.value)} />
+          <Select aria-label="Filter by importance" value={impFilter} onChange={(e) => setImpFilter(e.target.value)} className="w-auto">
+            <option value="">Any importance</option><option value="essential">Essential</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option>
+          </Select>
         </div>
         {!rows ? <Spinner /> : rows.length === 0 ? (
-          <EmptyState icon={<FileUp className="size-6" />} title={q || type ? "Nothing found" : "No documents yet"}>
+          <EmptyState icon={<FileUp className="size-6" />} title={q || type || topicFilter || impFilter ? "Nothing found" : "No documents yet"}>
             {q || type ? "Try other search terms." : "Upload previous Klausuren, your teacher's rubric or corrected work to start."}
           </EmptyState>
         ) : (
@@ -285,6 +306,17 @@ function Profile() {
       return true;
     } catch (e) { handle(e); return false; } finally { setBusy(null); }
   };
+  const [editing, setEditing] = useState<string | null>(null);
+  const updateEntry = async (id: string, entry: unknown) => {
+    setProblems([]);
+    try {
+      await api(`/api/examiner/profile/${id}`, { method: "PATCH", json: entry });
+      toast({ tone: "sage", text: "Entry updated" });
+      setEditing(null);
+      await load();
+      return true;
+    } catch (e) { handle(e); return false; }
+  };
   const remove = async (id: string) => {
     if (!confirm("Delete this profile entry?")) return;
     await api(`/api/examiner/profile/${id}`, { method: "DELETE" }).catch(handle);
@@ -346,6 +378,7 @@ function Profile() {
                 <li key={e.id} className="py-2.5">
                   <div className="flex items-start gap-2">
                     <p className="min-w-0 flex-1 text-sm">{e.statement}</p>
+                    <button aria-label="Edit entry" className="text-ink-3 hover:text-ink" onClick={() => setEditing(e.id)}><Pencil className="size-4" /></button>
                     <button aria-label="Delete entry" className="text-ink-3 hover:text-danger" onClick={() => remove(e.id)}><Trash2 className="size-4" /></button>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5"><ProvenanceBadge p={e.provenance} confidence={e.confidence} />{e.userEdited && <Badge>edited by you</Badge>}</div>
@@ -356,12 +389,18 @@ function Profile() {
                     </p>
                   ))}
                   {e.problems.length > 0 && <p className="mt-1 text-xs text-danger">No longer supported: {e.problems.join(" ")}</p>}
+                  {editing === e.id && (
+                    <div className="mt-2">
+                      <EntryForm title="Edit entry" submitLabel="Save changes" initial={e} materials={materials.filter((m) => m.docType)} onCancel={() => setEditing(null)}
+                        onSubmit={(body) => updateEntry(e.id, body)} />
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
           </Card>
         ))}
-        <AddEntry materials={materials.filter((m) => m.docType)} onAdd={(e) => addEntries([e])} />
+        <EntryForm title="Add an entry yourself" submitLabel="Add entry" materials={materials.filter((m) => m.docType)} onSubmit={(e) => addEntries([e])} />
       </div>
       <div className="space-y-4">
         <CourseCard course={data.course} onSave={saveCourse} />
@@ -383,26 +422,43 @@ function Profile() {
   );
 }
 
-function AddEntry({ materials, onAdd }: { materials: MaterialRow[]; onAdd: (e: unknown) => Promise<boolean> }) {
-  const [f, setF] = useState({ section: "other", statement: "", provenance: "general_principle", confidence: "medium", materialId: "", quote: "", url: "" });
-  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+type EntryDraft = { section: string; statement: string; provenance: string; confidence: string; materialId: string; quote: string; url: string };
+
+function entryDraft(e?: ProfileEntry): EntryDraft {
+  const doc = e?.evidence.find((ev) => ev.materialId);
+  return {
+    section: e?.section ?? "other", statement: e?.statement ?? "", provenance: e?.provenance ?? "general_principle", confidence: e?.confidence ?? "medium",
+    materialId: doc?.materialId ?? "", quote: doc?.quote ?? "", url: e?.evidence.find((ev) => ev.url)?.url ?? "",
+  };
+}
+
+/** Add or edit one profile entry. The server applies the honesty rules and explains any rejection. */
+function EntryForm({ materials, initial, title, submitLabel, onSubmit, onCancel }: {
+  materials: MaterialRow[]; initial?: ProfileEntry; title: string; submitLabel: string; onSubmit: (e: unknown) => Promise<boolean>; onCancel?: () => void;
+}) {
+  const [f, setF] = useState<EntryDraft>(() => entryDraft(initial));
+  const set = (k: keyof EntryDraft) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const id = initial?.id ?? "new";
   const submit = async () => {
     const evidence = [...(f.materialId ? [{ materialId: f.materialId, quote: f.quote || null }] : []), ...(f.url ? [{ url: f.url }] : [])];
-    if (await onAdd({ section: f.section, statement: f.statement, provenance: f.provenance, confidence: f.confidence, evidence })) setF({ ...f, statement: "", quote: "", url: "" });
+    if (await onSubmit({ section: f.section, statement: f.statement, provenance: f.provenance, confidence: f.confidence, evidence }) && !initial) setF(entryDraft());
   };
   return (
     <Card>
-      <h2 className="text-base font-semibold">Add an entry yourself</h2>
+      <h2 className="text-base font-semibold">{title}</h2>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <Field label="Section" htmlFor="ae-sec"><Select id="ae-sec" value={f.section} onChange={set("section")}>{PROFILE_SECTIONS.map((s) => <option key={s} value={s}>{sectionLabel(s)}</option>)}</Select></Field>
-        <Field label="Where does it come from?" htmlFor="ae-prov"><Select id="ae-prov" value={f.provenance} onChange={set("provenance")}>{PROVENANCE.map((p) => <option key={p} value={p}>{PROVENANCE_LABEL[p]}</option>)}</Select></Field>
-        <div className="sm:col-span-2"><Field label="Statement" htmlFor="ae-st"><Textarea id="ae-st" rows={2} value={f.statement} onChange={set("statement")} placeholder="e.g. Comments must include a counterargument." /></Field></div>
-        <Field label="Confidence" htmlFor="ae-conf"><Select id="ae-conf" value={f.confidence} onChange={set("confidence")}>{CONFIDENCE.map((c) => <option key={c} value={c}>{c}</option>)}</Select></Field>
-        <Field label="Evidence document" htmlFor="ae-doc"><Select id="ae-doc" value={f.materialId} onChange={set("materialId")}><option value="">None</option>{materials.map((m) => <option key={m.id} value={m.id}>{m.filename}</option>)}</Select></Field>
-        {f.materialId && <div className="sm:col-span-2"><Field label="Quote from that document (word for word)" htmlFor="ae-q"><Input id="ae-q" value={f.quote} onChange={set("quote")} /></Field></div>}
-        {f.provenance === "official_guidance" && <div className="sm:col-span-2"><Field label="Link to the official document" htmlFor="ae-url"><Input id="ae-url" type="url" value={f.url} onChange={set("url")} placeholder="https://" /></Field></div>}
+        <Field label="Section" htmlFor={`ae-sec-${id}`}><Select id={`ae-sec-${id}`} value={f.section} onChange={set("section")}>{PROFILE_SECTIONS.map((s) => <option key={s} value={s}>{sectionLabel(s)}</option>)}</Select></Field>
+        <Field label="Where does it come from?" htmlFor={`ae-prov-${id}`}><Select id={`ae-prov-${id}`} value={f.provenance} onChange={set("provenance")}>{PROVENANCE.map((p) => <option key={p} value={p}>{PROVENANCE_LABEL[p]}</option>)}</Select></Field>
+        <div className="sm:col-span-2"><Field label="Statement" htmlFor={`ae-st-${id}`}><Textarea id={`ae-st-${id}`} rows={2} value={f.statement} onChange={set("statement")} placeholder="e.g. Comments must include a counterargument." /></Field></div>
+        <Field label="Confidence" htmlFor={`ae-conf-${id}`}><Select id={`ae-conf-${id}`} value={f.confidence} onChange={set("confidence")}>{CONFIDENCE.map((c) => <option key={c} value={c}>{c}</option>)}</Select></Field>
+        <Field label="Evidence document" htmlFor={`ae-doc-${id}`}><Select id={`ae-doc-${id}`} value={f.materialId} onChange={set("materialId")}><option value="">None</option>{materials.map((m) => <option key={m.id} value={m.id}>{m.filename}</option>)}</Select></Field>
+        {f.materialId && <div className="sm:col-span-2"><Field label="Quote from that document (word for word)" htmlFor={`ae-q-${id}`}><Input id={`ae-q-${id}`} value={f.quote} onChange={set("quote")} /></Field></div>}
+        {f.provenance === "official_guidance" && <div className="sm:col-span-2"><Field label="Link to the official document" htmlFor={`ae-url-${id}`}><Input id={`ae-url-${id}`} type="url" value={f.url} onChange={set("url")} placeholder="https://" /></Field></div>}
       </div>
-      <Button className="mt-3" onClick={submit} disabled={f.statement.trim().length < 3}>Add entry</Button>
+      <div className="mt-3 flex gap-2">
+        <Button onClick={submit} disabled={f.statement.trim().length < 3}>{submitLabel}</Button>
+        {onCancel && <Button variant="ghost" onClick={onCancel}>Cancel</Button>}
+      </div>
     </Card>
   );
 }
@@ -472,6 +528,54 @@ function Exams() {
   );
 }
 
+// ---------------------------------------------------------------- results
+
+type AttemptRow = {
+  id: string; examId: string; title: string; status: string; timed: boolean; createdAt: string; submittedAt: string | null; difficulty: keyof typeof DIFFICULTY_LABEL;
+  timing: { elapsedSeconds?: number; overtimeSeconds?: number }; isDemoExam: boolean; versions: number;
+  assessments: { id: string; version: number; status: string; isDemo: boolean; estimate: { low: number; high: number; best: number | null } | null }[];
+};
+
+function Results() {
+  const [rows, setRows] = useState<AttemptRow[] | null>(null);
+  useEffect(() => void api<{ attempts: AttemptRow[] }>("/api/examiner/attempts").then((r) => setRows(r.attempts)), []);
+  if (!rows) return <Spinner />;
+  if (!rows.length) return <EmptyState icon={<GraduationCap className="size-6" />} title="No attempts yet" action={<LinkButton href="/abitur/examiner/new" variant="primary">Create an exam</LinkButton>}>Every exam you write appears here with its versions and feedback.</EmptyState>;
+  return (
+    <ul className="space-y-3">
+      {rows.map((r) => {
+        const done = r.assessments.filter((a) => a.status === "complete" && a.estimate);
+        const latest = done[done.length - 1];
+        return (
+          <li key={r.id}>
+            <Card>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link href={`/abitur/examiner/attempt/${r.id}`} className="min-w-0 basis-full truncate font-medium hover:underline sm:basis-0 sm:flex-1">{r.title}</Link>
+                <Badge>{DIFFICULTY_LABEL[r.difficulty]}</Badge>
+                <Badge tone={r.status === "submitted" ? "sage" : "accent"}>{r.status === "submitted" ? "submitted" : "in progress"}</Badge>
+              </div>
+              <p className="mt-1 text-xs text-ink-3">
+                {new Date(r.createdAt).toLocaleDateString()} · {r.timed ? "timed" : "untimed"}
+                {r.timing.elapsedSeconds ? ` · ${Math.round(r.timing.elapsedSeconds / 60)} min` : ""}{r.timing.overtimeSeconds ? ` (${Math.round(r.timing.overtimeSeconds / 60)} min over)` : ""}
+                {r.versions > 1 ? ` · ${r.versions} versions` : ""}
+              </p>
+              {latest?.estimate && (
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <PointsRange low={latest.estimate.low} high={latest.estimate.high} best={latest.estimate.best} />
+                  <Link className="text-sm underline" href={`/abitur/examiner/assessment/${latest.id}`}>Feedback{done.length > 1 ? ` (version ${latest.version})` : ""}</Link>
+                  {latest.isDemo && <Badge tone="warn">demo</Badge>}
+                </div>
+              )}
+              {r.status === "submitted" && !done.length && <p className="mt-2 text-sm text-ink-2">Not assessed yet. <Link className="underline" href={`/abitur/examiner/attempt/${r.id}`}>Get feedback</Link></p>}
+              {r.status !== "submitted" && <p className="mt-2 text-sm"><Link className="underline" href={`/abitur/examiner/attempt/${r.id}`}>Continue writing</Link></p>}
+            </Card>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 // ---------------------------------------------------------------- weaknesses
 
 function Weaknesses() {
@@ -489,21 +593,25 @@ function Weaknesses() {
         {Object.keys(rec.drills).length > 0 && (
           <p className="mt-2 text-sm">Practise: {Object.entries(rec.drills).map(([s, n]) => `${rec.focus.find((f) => f.skill === s)?.label ?? s} (${n} short drill${n === 1 ? "" : "s"})`).join(" · ")}</p>
         )}
-        <LinkButton className="mt-3" size="sm" href={`/abitur/examiner/new?difficulty=${rec.difficulty}`}>Create this exam</LinkButton>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <LinkButton size="sm" href={`/abitur/examiner/new?difficulty=${rec.difficulty}`}>Create this exam</LinkButton>
+          {rec.focus.length > 0 && <LinkButton size="sm" href="/abitur/examiner/drills">Practise my weaknesses</LinkButton>}
+        </div>
       </Card>
       <Card>
         <h2 className="text-lg">Skills across your exams</h2>
         {w.skills.length === 0 ? <p className="mt-2 text-sm text-ink-2">No assessed exams yet. Skills appear after your first real assessment.</p> : (
           <div className="mt-2 overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-ink-3"><th className="py-1.5 pr-3 font-medium">Skill</th><th className="pr-3 font-medium">Status</th><th className="pr-3 font-medium">Seen</th><th className="font-medium">Priority</th></tr></thead>
+              <thead><tr className="text-left text-ink-3"><th className="py-1.5 pr-3 font-medium">Skill</th><th className="pr-3 font-medium">Status</th><th className="pr-3 font-medium">Seen</th><th className="pr-3 font-medium">Priority</th><th className="font-medium"><span className="sr-only">Practise</span></th></tr></thead>
               <tbody className="divide-y divide-line">
                 {[...w.skills].sort((a, b) => b.priority - a.priority).map((s) => (
                   <tr key={s.skill}>
                     <td className="py-2 pr-3">{s.label}</td>
                     <td className="pr-3"><Badge tone={s.status === "recurring" ? "danger" : s.status === "secure_provisional" ? "sage" : s.status === "improving" ? "accent" : "neutral"}>{WEAKNESS_STATUS[s.status]}</Badge></td>
                     <td className="pr-3 tabular-nums">{s.timesPresent} / {s.history.length}</td>
-                    <td className="tabular-nums">{s.priority}</td>
+                    <td className="pr-3 tabular-nums">{s.priority}</td>
+                    <td><Link className="text-sm underline" href={`/abitur/examiner/drills?skill=${encodeURIComponent(s.skill)}`}>Practise</Link></td>
                   </tr>
                 ))}
               </tbody>
@@ -512,6 +620,17 @@ function Weaknesses() {
           </div>
         )}
       </Card>
+      {w.vocabulary.length > 0 && (
+        <Card>
+          <h2 className="text-lg">Your target vocabulary in exams</h2>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-ink-3"><th className="py-1.5 pr-3 font-medium">Word</th><th className="pr-3 text-right font-medium">Targeted</th><th className="pr-3 text-right font-medium">Used</th><th className="text-right font-medium">Natural</th></tr></thead>
+              <tbody className="divide-y divide-line">{w.vocabulary.slice(0, 20).map((v) => <tr key={v.term}><td className="py-1.5 pr-3">{v.term}</td><td className="pr-3 text-right tabular-nums">{v.offered}</td><td className="pr-3 text-right tabular-nums">{v.used}</td><td className="text-right tabular-nums">{v.natural}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </Card>
+      )}
       <Card>
         <h2 className="text-lg">Estimates over time</h2>
         {w.results.length === 0 ? <p className="mt-2 text-sm text-ink-2">No results yet.</p> : (

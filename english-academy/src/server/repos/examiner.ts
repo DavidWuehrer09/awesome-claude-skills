@@ -11,8 +11,10 @@ import {
   type Assessment, assessmentSchema, type Blueprint, blueprintSchema, classifyMaterial, CONFIDENCE, DOC_TYPES, type DocType, type Exam, examSchema,
   PROFILE_SECTIONS, PROVENANCE, studentView,
 } from "@/domain/examiner/model";
+import { packDocuments } from "@/domain/examiner/context";
 import { segment } from "@/domain/examiner/text";
-import { recommendNext, summarizeWeaknesses, type Severity } from "@/domain/examiner/weaknesses";
+import { DRILL_BANK } from "@/domain/examiner/drills";
+import { recommendNext, skillLabel, summarizeWeaknesses, type Severity } from "@/domain/examiner/weaknesses";
 import { normalizeHeadword, wordCount } from "@/lib/text";
 import { type AssessInput, materializeExam, type MaterialForAI } from "../ai/examiner-features";
 import { AIError, runFeature } from "../ai/service";
@@ -205,6 +207,15 @@ async function materialInfos(db: Db, userId: string, ids?: string[]): Promise<Ma
 
 const forAI = (m: MaterialInfo): MaterialForAI => ({ ...m });
 
+/** AI context budgets in characters (about 4 characters per token). */
+const BUDGET = { profile: 150_000, references: 80_000, sources: 60_000, rubrics: 80_000, examSources: 120_000 };
+
+function packed(list: MaterialInfo[], budget: number) {
+  const r = packDocuments(list, budget);
+  const byId = new Map(r.docs.map((d) => [d.id, d.promptText]));
+  return { list: list.map((m) => ({ ...forAI(m), promptText: byId.get(m.id) })), notes: r.notes };
+}
+
 // ---------------------------------------------------------------- course profile
 
 export const profileEntrySchema = z.object({
@@ -286,8 +297,9 @@ export async function suggestProfile(db: Db, userId: string) {
   const materials = [...(await materialInfos(db, userId)).values()].filter((m) => m.usable);
   if (!materials.length) throw badRequest("Confirm and review at least one document first");
   const existing = (await db.select({ s: examProfileEntries.statement }).from(examProfileEntries).where(eq(examProfileEntries.userId, userId))).map((r) => r.s);
-  const { data, meta } = await runFeature(db, userId, "examProfileSuggest", { materials: materials.map(forAI), existing });
-  return { ...data, demo: meta.demo };
+  const docs = packed(materials, BUDGET.profile);
+  const { data, meta } = await runFeature(db, userId, "examProfileSuggest", { materials: docs.list, existing });
+  return { ...data, gaps: [...docs.notes, ...data.gaps], demo: meta.demo };
 }
 
 // ---------------------------------------------------------------- exams
@@ -317,8 +329,10 @@ export async function generateExam(db: Db, userId: string, input: z.input<typeof
   const profile = await getProfile(db, userId);
   const verifiedGuidance = profile.course.officialGuidance.some((g) => g.verified);
   const w = await examinerWeaknesses(db, userId);
-  const refs = refIds.map((id) => forAI(materials.get(id)!));
-  const sources = bp.sourceMaterialIds.map((id) => forAI(materials.get(id)!));
+  const refPack = packed(refIds.map((id) => materials.get(id)!), BUDGET.references);
+  const srcPack = packed(bp.sourceMaterialIds.map((id) => materials.get(id)!), BUDGET.sources);
+  const refs = refPack.list;
+  const sources = srcPack.list;
   const { data, meta } = await runFeature(db, userId, "examGenerate", {
     blueprint: bp,
     profile: bp.matchTeacherFormat ? profile.entries.filter((e) => !e.problems.length).map((e) => ({ statement: e.statement, provenance: e.provenance, confidence: e.confidence })) : [],
@@ -331,9 +345,9 @@ export async function generateExam(db: Db, userId: string, input: z.input<typeof
   if (result.errors.length) throw new HttpError(422, "The generated exam failed the originality and honesty checks; nothing was saved.", "exam_check", result.errors);
   const [row] = await db.insert(exams).values({
     userId, title: exam.title.slice(0, 200), difficulty: exam.difficulty, blueprint: bp as unknown as Record<string, unknown>,
-    exam: exam as unknown as Record<string, unknown>, validation: { warnings: result.warnings, originality: result.originality }, isDemo: meta.demo,
+    exam: exam as unknown as Record<string, unknown>, validation: { warnings: [...refPack.notes, ...srcPack.notes, ...result.warnings], originality: result.originality }, isDemo: meta.demo,
   }).returning({ id: exams.id });
-  return { id: row.id, warnings: result.warnings, demo: meta.demo };
+  return { id: row.id, warnings: [...refPack.notes, ...srcPack.notes, ...result.warnings], demo: meta.demo };
 }
 
 async function loadExam(db: Db, userId: string, id: string) {
@@ -358,7 +372,7 @@ export async function getExamOverview(db: Db, userId: string, id: string) {
   const { row, exam } = await loadExam(db, userId, id);
   return {
     id: row.id, isDemo: row.isDemo, createdAt: row.createdAt, view: studentView(exam), validation: row.validation,
-    provenance: { notes: exam.provenance.notes, assumptions: exam.provenance.assumptions, formatBasedOn: exam.provenance.formatBasedOn.length },
+    provenance: { notes: exam.provenance.notes, assumptions: exam.provenance.assumptions, conflicts: exam.provenance.conflicts ?? [], formatBasedOn: exam.provenance.formatBasedOn.length },
     markingOrigin: exam.marking.origin,
   };
 }
@@ -369,6 +383,24 @@ export async function deleteExam(db: Db, userId: string, id: string) {
 }
 
 // ---------------------------------------------------------------- attempts
+
+/** My Results: every attempt with its versions and the latest assessment per version. */
+export async function listAttempts(db: Db, userId: string) {
+  const rows = await db.select({ id: examAttempts.id, examId: examAttempts.examId, status: examAttempts.status, timed: examAttempts.timed, createdAt: examAttempts.createdAt, submittedAt: examAttempts.submittedAt, timing: examAttempts.timing, title: exams.title, difficulty: exams.difficulty, isDemoExam: exams.isDemo })
+    .from(examAttempts).innerJoin(exams, eq(exams.id, examAttempts.examId)).where(eq(examAttempts.userId, userId)).orderBy(desc(examAttempts.createdAt));
+  if (!rows.length) return [];
+  const ids = rows.map((r) => r.id);
+  const versions = await db.select({ attemptId: examAttemptVersions.attemptId, n: examAttemptVersions.n }).from(examAttemptVersions).where(inArray(examAttemptVersions.attemptId, ids));
+  const asms = await db.select({ id: examAssessments.id, attemptId: examAssessments.attemptId, version: examAssessments.version, status: examAssessments.status, isDemo: examAssessments.isDemo, data: examAssessments.data })
+    .from(examAssessments).where(inArray(examAssessments.attemptId, ids));
+  return rows.map((r) => ({
+    ...r,
+    versions: versions.filter((v) => v.attemptId === r.id).length,
+    assessments: asms.filter((x) => x.attemptId === r.id).sort((x, y) => x.version - y.version).map((x) => ({
+      id: x.id, version: x.version, status: x.status, isDemo: x.isDemo, estimate: (x.data as unknown as Assessment | null)?.estimate ?? null,
+    })),
+  }));
+}
 
 export async function startAttempt(db: Db, userId: string, examId: string, timed: boolean) {
   const { exam } = await loadExam(db, userId, examId);
@@ -483,18 +515,22 @@ export async function assessAttempt(db: Db, userId: string, attemptId: string, v
         .find((x) => x.version < v.n)
       : undefined;
     const prev = prevRow?.data as unknown as Assessment | undefined;
+    const rubricPack = packed(rubrics, BUDGET.rubrics);
+    const sourcePack = packDocuments(exam.sources.map((x) => ({ id: x.id, filename: x.title, text: x.text })), BUDGET.examSources);
+    const contextNotes = [...rubricPack.notes, ...sourcePack.notes];
     const input: AssessInput = {
       exam, answers: v.answers, version: v.n,
       previous: prev && prevRow ? { version: prevRow.version, estimate: prev.estimate, topComments: prev.comments.filter((c) => !c.withdrawn && c.severity !== "minor").slice(0, 6).map((c) => c.problem) } : null,
       profile: profile.entries.filter((e) => !e.problems.length).map((e) => ({ statement: e.statement, provenance: e.provenance, confidence: e.confidence })),
-      rubrics: rubrics.map(forAI), materials: [...materials.values()].map(forAI), unhelpful: await unhelpfulHistory(db, userId),
+      rubrics: rubricPack.list, materials: [...materials.values()].map(forAI), unhelpful: await unhelpfulHistory(db, userId),
+      promptSources: Object.fromEntries(sourcePack.docs.map((d) => [d.id, d.promptText])),
     };
     const { data, meta } = await runFeature(db, userId, "examAssess", input);
     const assessment = assessmentSchema.parse(data) as Assessment;
     const check = checkAssessment(assessment, { exam, answers: v.answers, materials });
     if (check.errors.length) throw new HttpError(422, "The assessment failed the honesty checks and was not saved.", "assessment_check", check.errors);
     const [done] = await db.update(examAssessments).set({
-      status: "complete", data: { ...assessment, validationWarnings: check.warnings } as unknown as Record<string, unknown>, provider: meta.provider, promptVersion: meta.promptVersion,
+      status: "complete", data: { ...assessment, validationWarnings: [...contextNotes, ...check.warnings] } as unknown as Record<string, unknown>, provider: meta.provider, promptVersion: meta.promptVersion,
       isDemo: meta.demo, error: null,
     }).where(eq(examAssessments.id, row.id)).returning();
     if (!meta.demo) await recordVocabUsage(db, userId, assessment.vocabUsage);
@@ -607,6 +643,19 @@ export async function disputeComment(db: Db, userId: string, assessmentId: strin
   return { dispute: resolved };
 }
 
+/** "Why did you mark this?": a longer explanation of one comment, without disputing it. */
+export async function explainComment(db: Db, userId: string, assessmentId: string, commentId: string) {
+  const { assessment: row } = await getAssessment(db, userId, assessmentId);
+  const data = row.data as unknown as Assessment | null;
+  const comment = data?.comments.find((c) => c.id === commentId);
+  if (!comment) throw notFound("Comment not found");
+  const a = await loadAttempt(db, userId, row.attemptId);
+  const { exam } = await loadExam(db, userId, a.examId);
+  const [version] = await db.select().from(examAttemptVersions).where(and(eq(examAttemptVersions.attemptId, a.id), eq(examAttemptVersions.n, row.version)));
+  const { data: out, meta } = await runFeature(db, userId, "examExplain", { comment, answer: version?.answers[comment.task] ?? "", task: exam.tasks.find((t) => t.number === comment.task) });
+  return { ...out, demo: meta.demo };
+}
+
 export const unhelpfulSchema = z.object({ commentId: z.string().min(1).max(20), reason: z.string().trim().min(3).max(500) });
 
 export async function markUnhelpful(db: Db, userId: string, assessmentId: string, input: z.input<typeof unhelpfulSchema>) {
@@ -634,5 +683,60 @@ export async function examinerWeaknesses(db: Db, userId: string) {
     const e = (r.data as unknown as Assessment).estimate;
     return { id: r.id, title: r.title, date: r.createdAt.toISOString(), version: r.version, low: e.low, high: e.high, best: e.best, basis: e.basis, difficulty: r.difficulty as Blueprint["difficulty"] };
   });
-  return { skills, results, recommendation: recommendNext(skills, results), demoAssessments: rows.length - real.length };
+  // Target vocabulary across exams: how often each word was used, and used naturally.
+  const vocab = new Map<string, { term: string; offered: number; used: number; natural: number }>();
+  for (const r of real) {
+    for (const u of (r.data as unknown as Assessment).vocabUsage ?? []) {
+      const v = vocab.get(u.term.toLowerCase()) ?? { term: u.term, offered: 0, used: 0, natural: 0 };
+      v.offered++;
+      if (u.used) v.used++;
+      if (u.used && u.natural) v.natural++;
+      vocab.set(u.term.toLowerCase(), v);
+    }
+  }
+  return { skills, results, recommendation: recommendNext(skills, results), demoAssessments: rows.length - real.length, vocabulary: [...vocab.values()].sort((a, b) => b.offered - a.offered) };
+}
+
+// ---------------------------------------------------------------- Improvement Lab and drills
+
+export const labSchema = z.object({
+  text: z.string().trim().min(10, "Paste at least one sentence").max(20_000),
+  taskType: z.string().trim().max(60).nullish(),
+  context: z.string().trim().max(60_000).nullish(),
+  focus: z.string().trim().max(300).nullish(),
+});
+
+export async function runLab(db: Db, userId: string, input: z.input<typeof labSchema>) {
+  const p = labSchema.parse(input);
+  const { data, meta } = await runFeature(db, userId, "examLab", { text: p.text, taskType: p.taskType ?? null, context: p.context ?? null, focus: p.focus ?? null });
+  return { ...data, demo: meta.demo };
+}
+
+/** Short drills for the given skills, or for the current focus skills (more for recurring problems). */
+export async function generateDrills(db: Db, userId: string, skills?: string[]) {
+  const w = await examinerWeaknesses(db, userId);
+  const wanted = (skills?.length ? skills : w.recommendation.focus.map((f) => f.skill)).slice(0, 4);
+  if (!wanted.length) throw badRequest("No weaknesses recorded yet. Choose a skill to practise.");
+  const list = wanted.map((skill) => ({ skill, label: skillLabel(skill), count: w.recommendation.drills[skill] ?? 2 }));
+  const { data, meta } = await runFeature(db, userId, "examDrills", {
+    skills: list, vocabulary: await weakVocabulary(db, userId), examples: list.map((s) => DRILL_BANK[s.skill]).filter((d) => !!d),
+  });
+  return { ...data, demo: meta.demo };
+}
+
+/** Everything in My English Examiner as JSON (original files are downloaded individually). */
+export async function exportExaminer(db: Db, userId: string) {
+  const mats = await db.select({ ...materialColumns, text: examMaterials.text, textHistory: examMaterials.textHistory }).from(examMaterials).where(eq(examMaterials.userId, userId));
+  const [profile, examRows, attempts, versions, assessments] = await Promise.all([
+    getProfile(db, userId),
+    db.select().from(exams).where(eq(exams.userId, userId)),
+    db.select().from(examAttempts).where(eq(examAttempts.userId, userId)),
+    db.select().from(examAttemptVersions).where(eq(examAttemptVersions.userId, userId)),
+    db.select().from(examAssessments).where(eq(examAssessments.userId, userId)),
+  ]);
+  return {
+    exportedAt: new Date().toISOString(), format: "english-academy-examiner@1",
+    materials: mats.map((m) => ({ ...m, originalFile: `/api/examiner/materials/${m.id}/original` })),
+    courseProfile: { course: profile.course, entries: profile.entries }, exams: examRows, attempts, versions, assessments,
+  };
 }

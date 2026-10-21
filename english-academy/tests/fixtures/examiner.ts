@@ -19,7 +19,7 @@ export function sampleExam(over: Partial<Exam> = {}): Exam {
       ],
       vocabularyTargets: ["to mitigate"], weaknessTargets: [],
     },
-    provenance: { formatBasedOn: [], profileEntriesUsed: [], notes: "", assumptions: [] },
+    provenance: { formatBasedOn: [], profileEntriesUsed: [], notes: "", assumptions: [], conflicts: [] },
     ...over,
   };
 }

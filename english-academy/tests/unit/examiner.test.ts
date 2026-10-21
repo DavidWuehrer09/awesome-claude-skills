@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { checkAssessment, checkExam, checkProfileEntry, type Materials } from "@/domain/examiner/checks";
 import { classifyMaterial, studentView } from "@/domain/examiner/model";
 import { containsQuote, quotedSpans, similarity } from "@/domain/examiner/text";
+import { packDocuments } from "@/domain/examiner/context";
 import { ANSWERS, sampleExam, SOURCE, validAssessment } from "../fixtures/examiner";
 import { recommendNext, summarizeWeaknesses, weaknessStatus } from "@/domain/examiner/weaknesses";
 
@@ -151,5 +152,24 @@ describe("weakness tracking", () => {
     expect(clean.difficulty).toBe("stretch");
     expect(recommendNext([], [{ low: 4, high: 6, difficulty: "stretch", version: 1 }, { low: 5, high: 6, difficulty: "stretch", version: 1 }]).difficulty).toBe("realistic");
     expect(recommendNext([], []).advice[0]).toMatch(/baseline/);
+  });
+});
+
+describe("long documents for the AI", () => {
+  const para = (s: string, n = 40) => Array.from({ length: n }, () => s).join(" ");
+  it("sends short documents unchanged", () => {
+    const r = packDocuments([{ id: "a", filename: "a.txt", text: "Short." }], 1000);
+    expect(r.docs[0].promptText).toBe("Short.");
+    expect(r.notes).toEqual([]);
+  });
+  it("keeps the opening and grading-related parts of long documents and says what was left out", () => {
+    const text = [para("Title and instructions of the Klausur."), ...Array.from({ length: 8 }, (_, i) => para(`Narrative filler paragraph ${i}.`)), para("Bewertung: Inhalt 60 Punkte, Sprache 40 Punkte.")].join("\n\n");
+    const r = packDocuments([{ id: "a", filename: "klausur.pdf", text }], 1600, 400);
+    const out = r.docs[0].promptText;
+    expect(out).toContain("Title and instructions");
+    expect(out).toContain("Bewertung: Inhalt 60 Punkte");
+    expect(out).toMatch(/omitted for length/);
+    expect(out.length).toBeLessThan(text.length);
+    expect(r.notes[0]).toMatch(/“klausur.pdf” is long: the AI read \d+ of \d+ sections/);
   });
 });

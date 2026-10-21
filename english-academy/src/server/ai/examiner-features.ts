@@ -1,6 +1,8 @@
 import "server-only";
 import { z } from "zod";
-import { type Assessment, assessmentSchema, type Blueprint, CONFIDENCE, type DocType, type Exam, examSchema, PROFILE_SECTIONS, PROVENANCE } from "@/domain/examiner/model";
+import { DRILL_BANK, type Drill } from "@/domain/examiner/drills";
+import { containsQuote, quotedSpans } from "@/domain/examiner/text";
+import { type Assessment, assessmentSchema, type Blueprint, labItemSchema, CONFIDENCE, type DocType, type Exam, examSchema, PROFILE_SECTIONS, PROVENANCE } from "@/domain/examiner/model";
 import { checkAssessment, checkExam, checkProfileEntry, type MaterialInfo, type Materials } from "@/domain/examiner/checks";
 import { TAXONOMY } from "@/domain/examiner/weaknesses";
 import { LIBRARY } from "@/domain/writing/library";
@@ -23,9 +25,12 @@ Honesty rules (mandatory):
 - Prioritise what costs the most marks. Do not reward verbosity, memorised phrases or obscure vocabulary for its own sake.`;
 
 const json = (v: unknown) => JSON.stringify(v, null, 1);
-const excerpt = (t: string, n = 12000) => (t.length > n ? `${t.slice(0, n)}\n[…truncated…]` : t);
+// Safety net only: documents are budgeted by packDocuments (src/domain/examiner/context.ts) before they get here.
+const excerpt = (t: string, n = 200_000) => (t.length > n ? `${t.slice(0, n)}\n[…truncated…]` : t);
 
-export type MaterialForAI = { id: string; filename: string; docType: DocType | null; usable: boolean; text: string };
+/** `text` is the full document (used by the honesty checks); `promptText` is what the AI reads, if shortened. */
+export type MaterialForAI = { id: string; filename: string; docType: DocType | null; usable: boolean; text: string; promptText?: string };
+const read = (m: MaterialForAI) => excerpt(m.promptText ?? m.text);
 const toMap = (ms: MaterialForAI[]): Materials => new Map(ms.map((m) => [m.id, m satisfies MaterialInfo]));
 
 /** Uploaded sources always use the stored document text, never the model's copy. */
@@ -78,6 +83,8 @@ export type AssessInput = {
   rubrics: MaterialForAI[];
   materials: MaterialForAI[];
   unhelpful: { comment: string; reason: string }[];
+  /** Shortened exam source texts for the prompt (full texts stay in exam for the checks). */
+  promptSources?: Record<string, string>;
 };
 
 // ---------------------------------------------------------------- dispute
@@ -91,6 +98,26 @@ const disputeOutput = z.object({
     severity: assessmentSchema.shape.comments.element.shape.severity,
   }).nullable(),
 });
+const explainOutput = z.object({
+  explanation: z.string(),
+  basis: z.enum(PROVENANCE),
+  examples: z.array(z.object({ weaker: z.string(), stronger: z.string() })),
+});
+type ExplainInput = { comment: Assessment["comments"][number]; answer: string; task: Exam["tasks"][number] | undefined };
+
+// ---------------------------------------------------------------- standalone Improvement Lab and drills
+
+const labOutput = z.object({ items: z.array(labItemSchema), overall: z.string() });
+export type LabInput = { text: string; taskType: string | null; context: string | null; focus: string | null };
+
+const drillOutput = z.object({
+  drills: z.array(z.object({
+    skill: z.string(), kind: z.enum(["rewrite", "short_paragraph", "identify", "plan"]), instruction: z.string(),
+    material: z.string().nullable(), modelAnswer: z.string().nullable(), checklist: z.array(z.string()),
+  })),
+});
+export type DrillInput = { skills: { skill: string; label: string; count: number }[]; vocabulary: string[]; examples: Drill[] };
+
 type DisputeInput = { comment: Assessment["comments"][number]; argument: string; answer: string; task: Exam["tasks"][number] | undefined; sources: string };
 
 export const examinerFeatures = {
@@ -109,7 +136,7 @@ export const examinerFeatures = {
     id: "examProfileSuggest", version: "examProfileSuggest@1", schema: profileSuggestOutput, effort: "medium", maxTokens: 8000,
     system: `${EXAMINER_PRINCIPLES}
 Task: propose entries for the student's course profile from their confirmed documents (exam format, time limit, task types and wording, answer length, source genres, grading criteria, recurring feedback…). Every entry needs evidence: materialId plus a short word-for-word quote. One supporting document = confidence "provisional"; "high" needs three. Only teacher documents (exam papers, rubrics, corrections, task instructions, model answers) can support teacher_explicit, and only for what they literally say. Grading criteria inferred from patterns must say "inferred". List what is missing in "gaps". Do not repeat existing entries.`,
-    user: (i: ProfileSuggestInput) => `Existing entries:\n${json(i.existing)}\n\nDocuments:\n${i.materials.map((m) => `### ${m.id} (${m.docType}, ${m.filename})\n${excerpt(m.text, 8000)}`).join("\n\n")}`,
+    user: (i: ProfileSuggestInput) => `Existing entries:\n${json(i.existing)}\n\nDocuments:\n${i.materials.map((m) => `### ${m.id} (${m.docType}, ${m.filename})\n${read(m)}`).join("\n\n")}`,
     check: (i: ProfileSuggestInput, o) => {
       const map = toMap(i.materials);
       return o.entries.flatMap((e, n) => checkProfileEntry(e, map).map((p) => `entry ${n + 1}: ${p}`));
@@ -126,14 +153,14 @@ Task: create an ORIGINAL practice exam from the blueprint.
 - Tasks: realistic operators (summarise, outline, analyse, examine, comment, discuss, assess, mediate…) at the requested difficulty, with an expected length.
 - Points: only if a teacher document defines them (origin teacher_provided, sourceMaterialIds set); otherwise either no points (origin "none") or an AI scheme with origin "ai_practice" whose label contains "practice". totalPoints must equal the sum of task points.
 - hidden.taskExpectations: for EVERY task, the expected content, acceptable alternative interpretations, marking notes and common pitfalls. This is only shown after submission.
-- provenance: which reference documents the format follows, which profile statements you used, and every assumption (e.g. "time limit assumed: no teacher information").`,
+- provenance: which reference documents the format follows, which profile statements you used, and every assumption (e.g. "time limit assumed: no teacher information"). In provenance.conflicts, list every point where the old exams' format differs from the verified official guidance in the course profile (e.g. length, time, task types); show both, do not silently pick one.`,
     user: (i: GenerateInput) => `Blueprint:\n${json(i.blueprint)}
 Course profile (with provenance):\n${json(i.profile)}
 Verified official guidance on record: ${i.verifiedGuidance ? "yes" : "no (label Abitur-level formats as assumptions)"}
 Weaknesses to target (if focusWeaknesses): ${json(i.focusSkills)}
 Vocabulary to elicit naturally (if includeVocabulary): ${json(i.vocabulary)}
-Reference exams (format only):\n${i.references.map((r) => `### ${r.id} (${r.filename})\n${excerpt(r.text, 8000)}`).join("\n\n") || "none"}
-Available source documents:\n${i.sources.map((s) => `### ${s.id} (${s.filename})\n${excerpt(s.text, 4000)}`).join("\n\n") || "none"}`,
+Reference exams (format only):\n${i.references.map((r) => `### ${r.id} (${r.filename})\n${read(r)}`).join("\n\n") || "none"}
+Available source documents:\n${i.sources.map((s) => `### ${s.id} (${s.filename})\n${read(s)}`).join("\n\n") || "none"}`,
     check: (i: GenerateInput, o) => {
       const map = toMap([...i.references, ...i.sources]);
       const r = checkExam(materializeExam(o, map), { materials: map, referenceIds: i.references.map((x) => x.id), verifiedGuidance: i.verifiedGuidance });
@@ -158,15 +185,49 @@ Task: assess the student's submitted exam like a demanding but fair teacher.
 - weaknessObservations: for each relevant skill in the taxonomy (or "custom:<name>"), whether it was present this time, with comment ids. Report absent skills too when the task tested them.
 - vocabUsage: for each target vocabulary item, whether and how naturally it was used.
 Taxonomy: ${Object.keys(TAXONOMY).join(", ")}`,
-    user: (i: AssessInput) => `Exam (including hidden expectations):\n${json({ ...i.exam, sources: i.exam.sources.map((s) => ({ ...s, text: excerpt(s.text, 10000) })) })}
+    user: (i: AssessInput) => `Exam (including hidden expectations):\n${json({ ...i.exam, sources: i.exam.sources.map((s) => ({ ...s, text: excerpt(i.promptSources?.[s.id] ?? s.text) })) })}
 Course profile:\n${json(i.profile)}
-Teacher rubric documents:\n${i.rubrics.map((r) => `### ${r.id} (${r.docType}, ${r.filename})\n${excerpt(r.text, 8000)}`).join("\n\n") || "none"}
+Teacher rubric documents:\n${i.rubrics.map((r) => `### ${r.id} (${r.docType}, ${r.filename})\n${read(r)}`).join("\n\n") || "none"}
 Comments the student found unhelpful before:\n${json(i.unhelpful)}
 ${i.previous ? `This is revision ${i.version}. Previous version ${i.previous.version}: estimate ${i.previous.estimate.low}–${i.previous.estimate.high}; main points: ${json(i.previous.topComments)}. Say what improved.\n` : ""}
 Student's answers (version ${i.version}):\n${Object.entries(i.answers).map(([t, a]) => `--- Task ${t} (${wordCount(a)} words)\n${a || "[no answer]"}`).join("\n\n")}`,
     check: (i: AssessInput, o) => checkAssessment(o, { exam: i.exam, answers: i.answers, materials: toMap(i.materials) }).errors,
     demo: (i: AssessInput) => demoAssessment(i),
   } satisfies Feature<AssessInput, typeof assessmentSchema>,
+
+  examLab: {
+    id: "examLab", version: "examLab@1", schema: labOutput, effort: "medium", maxTokens: 10000,
+    system: `${EXAMINER_PRINCIPLES}
+Task: the 15-Point Improvement Lab. Choose the 2–5 passages of the student's text where improvement matters most (or the passage they ask about). For each: quote it exactly ("original"), then level 1 = correct and clear, level 2 = stronger and more precise, level 3 = high-level (only if it stays natural; otherwise null). Explain what makes each level effective, the nuance, which of reasoning/structure/analysis/language it improves, why it fits this context, and any risk (e.g. sounding forced). Add a short exercise to practise the same move. Keep the student's meaning; do not invent facts about a source. "task" is "lab". In "overall", give one or two sentences on the most valuable improvement.`,
+    user: (i: LabInput) => `${i.taskType ? `Task type: ${i.taskType}\n` : ""}${i.focus ? `Focus requested: ${i.focus}\n` : ""}${i.context ? `Context/source (for checking content):\n"""${excerpt(i.context, 40_000)}"""\n` : ""}Student's text:\n"""${i.text}"""`,
+    check: (i: LabInput, o) => o.items.flatMap((item, n) => [
+      ...(containsQuote(i.text, item.original) ? [] : [`item ${n + 1}: "original" is not in the student's text`]),
+      ...[item.level1Correct, item.level2Stronger, item.level3HighLevel].flatMap((t) => quotedSpans(t).filter((q) => !containsQuote(`${i.text}\n${i.context ?? ""}`, q)).map((q) => `item ${n + 1}: quotation not in the texts: "${q.slice(0, 50)}"`)),
+    ]),
+    demo: () => ({ items: [], overall: "Demo mode cannot rewrite your text. With an AI provider configured, the lab shows each chosen passage at three levels with explanations and an exercise." }),
+  } satisfies Feature<LabInput, typeof labOutput>,
+
+  examDrills: {
+    id: "examDrills", version: "examDrills@1", schema: drillOutput, effort: "low", maxTokens: 6000,
+    system: `${EXAMINER_PRINCIPLES}
+Task: write short, original practice drills for the student's recurring weaknesses (the requested number per skill). Kinds: rewrite (improve given material), short_paragraph (write 3–6 sentences), identify (find the problem), plan (plan an answer). Each drill has a clear instruction, its own short material (fictional; never attributed to a real author), a model answer where one exists, and a 2–4 point self-check list. Use the given vocabulary where it fits naturally. The examples show the expected style; do not copy them.`,
+    user: (i: DrillInput) => `Skills: ${json(i.skills)}\nVocabulary: ${json(i.vocabulary)}\nExamples:\n${json(i.examples.slice(0, 3))}`,
+    demo: (i: DrillInput) => ({ drills: i.skills.map((s) => DRILL_BANK[s.skill]).filter((d): d is Drill => !!d) }),
+  } satisfies Feature<DrillInput, typeof drillOutput>,
+
+  examExplain: {
+    id: "examExplain", version: "examExplain@1", schema: explainOutput, effort: "low", maxTokens: 3000, fast: true,
+    system: `${EXAMINER_PRINCIPLES}
+Task: the student asks why a passage was marked. Explain the reasoning in plain, encouraging language (3–6 sentences): what the reader experiences, which convention or expectation is involved, and why the alternative works better here. Say honestly where the comment's basis comes from (teacher document, observed pattern, general principle or suggestion). Give 1–2 short general examples (not copied from the student's text) of weaker vs stronger phrasing.`,
+    user: (i: ExplainInput) => `Task: ${i.task ? `${i.task.number} (${i.task.type}) ${i.task.instruction}` : "unknown"}
+Comment:\n${json(i.comment)}
+Student's answer to this task:\n"""${i.answer}"""`,
+    demo: (i: ExplainInput) => ({
+      explanation: `Demo mode cannot explain beyond the stored comment. The comment says: ${i.comment.problem} ${i.comment.whyWeakens}${i.comment.whyBetter ? ` The suggested alternative is better because: ${i.comment.whyBetter}` : ""}`,
+      basis: i.comment.provenance,
+      examples: [],
+    }),
+  } satisfies Feature<ExplainInput, typeof explainOutput>,
 
   examDispute: {
     id: "examDispute", version: "examDispute@1", schema: disputeOutput, effort: "medium", maxTokens: 4000,
@@ -176,7 +237,7 @@ Task: the student disputes one comment from your assessment. Reconsider it hones
 Comment:\n${json(i.comment)}
 Student's argument:\n"""${i.argument}"""
 Student's full answer to this task:\n"""${i.answer}"""
-Sources (excerpt):\n${excerpt(i.sources, 6000)}`,
+Sources:\n${excerpt(i.sources, 60_000)}`,
     demo: () => {
       throw new Error("demo_unsupported");
     },
@@ -248,6 +309,7 @@ function demoExam(i: GenerateInput): Exam {
       profileEntriesUsed: [],
       notes: "Demo mode: a fixed task pattern with a built-in fictional text. No reference exam or course profile was analysed.",
       assumptions: ["Task sequence, word counts and timing are generic assumptions, not your teacher's format."],
+      conflicts: [],
     },
   };
 }

@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import {
-  BookOpen, CloudOff, Gauge, GraduationCap, House, Layers, LineChart, LogOut, Menu, MessagesSquare, Network, PenLine, RefreshCw, Search, Settings, Target,
+  BookOpen, ClipboardCheck, CloudOff, Gauge, GraduationCap, House, Layers, LineChart, LogOut, Menu, MessagesSquare, Network, PenLine, RefreshCw, Search, Settings, Target,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -21,6 +21,7 @@ export const NAV = [
   { href: "/writing", label: "Writing Lab", icon: PenLine },
   { href: "/tutor", label: "AI Tutor", icon: MessagesSquare },
   { href: "/abitur", label: "Abitur Academy", icon: GraduationCap },
+  { href: "/abitur/examiner", label: "My Examiner", icon: ClipboardCheck },
   { href: "/progress", label: "Progress", icon: LineChart },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -76,7 +77,9 @@ export function AppShell({ children, user, isAdmin = false }: { children: ReactN
   const router = useRouter();
   const [more, setMore] = useState(false);
   const [search, setSearch] = useState(false);
-  const active = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  // The most specific matching entry wins (e.g. /abitur/examiner over /abitur).
+  const best = nav.filter((n) => pathname === n.href || pathname.startsWith(`${n.href}/`)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
+  const active = (href: string) => href === best;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

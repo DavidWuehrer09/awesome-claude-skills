@@ -1,9 +1,10 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowLeft, Flag, MessageSquareWarning, ThumbsDown } from "lucide-react";
+import { ArrowLeft, Flag, HelpCircle, MessageSquareWarning, ThumbsDown } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { LabItemCard } from "@/components/examiner/lab-item";
 import { PointsRange, ProvenanceBadge } from "@/components/examiner/shared";
 import { Badge, Button, Card, Dialog, Notice, Spinner, Tabs, Textarea, useToast } from "@/components/ui";
 import { type Assessment, DIMENSION_LABEL, ESTIMATE_DISCLAIMER, type Exam, type StudentExam } from "@/domain/examiner/model";
@@ -22,6 +23,9 @@ const SEVERITY_TONE = { major: "danger", moderate: "warn", minor: "neutral", non
 const STATUS_LABEL: Record<string, string> = {
   incorrect: "Incorrect English", unnatural: "Unnatural", imprecise: "Imprecise", valid_less_effective: "Correct, but less effective", excellent: "Excellent", not_language: "Content / structure",
 };
+const CATEGORY_LABEL: Record<string, string> = {
+  content: "Content", language_error: "Language error", style: "Style", optional_refinement: "Optional refinement", structure: "Structure", task_fulfilment: "Task fulfilment",
+};
 const LEVEL_TONE: Record<string, "sage" | "navy" | "neutral" | "warn" | "danger"> = { excellent: "sage", strong: "sage", solid: "navy", adequate: "neutral", weak: "warn", very_weak: "danger", not_assessed: "neutral" };
 
 type Section = "feedback" | "lab" | "model" | "plan";
@@ -36,6 +40,21 @@ export function AssessmentReport({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const load = useCallback(() => api<Data>(`/api/examiner/assessments/${id}`).then(setD).catch((e) => setError(errorMessage(e))), [id]);
   useEffect(() => void load(), [load]);
+
+  const [explanations, setExplanations] = useState<Record<string, { explanation: string; basis: Assessment["comments"][number]["provenance"]; examples: { weaker: string; stronger: string }[]; demo: boolean }>>({});
+  const [explaining, setExplaining] = useState<string | null>(null);
+  const explain = async (commentId: string) => {
+    if (explanations[commentId] || explaining) return;
+    setExplaining(commentId);
+    try {
+      const r = await api<(typeof explanations)[string]>(`/api/examiner/assessments/${id}/explain`, { method: "POST", json: { commentId } });
+      setExplanations((x) => ({ ...x, [commentId]: r }));
+    } catch (e) {
+      toast({ tone: "danger", text: errorMessage(e) });
+    } finally {
+      setExplaining(null);
+    }
+  };
 
   const send = async () => {
     if (!dispute) return;
@@ -139,6 +158,7 @@ export function AssessmentReport({ id }: { id: string }) {
                     <Card key={c.id} className={clsx(c.withdrawn && "opacity-60")}>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Badge tone={SEVERITY_TONE[c.severity]}>{c.severity}</Badge>
+                        <Badge tone={c.category === "optional_refinement" ? "neutral" : "navy"}>{CATEGORY_LABEL[c.category] ?? c.category}</Badge>
                         <Badge>{STATUS_LABEL[c.englishStatus]}</Badge>
                         <ProvenanceBadge p={c.provenance} />
                         <span className="text-xs text-ink-3">task {c.task}</span>
@@ -147,6 +167,13 @@ export function AssessmentReport({ id }: { id: string }) {
                       <p className="mt-2 text-sm"><q className={clsx("rounded px-1", c.withdrawn ? "line-through" : "bg-warn-soft")}>{c.original}</q></p>
                       <p className="mt-2 text-sm"><span className="font-medium">{c.problem}</span> {c.whyWeakens}</p>
                       {c.alternative && <p className="mt-2 text-sm">Better: <span className="rounded bg-sage-soft px-1 text-sage">{c.alternative}</span> <span className="text-ink-2">— {c.whyBetter}</span></p>}
+                      {explanations[c.id] && (
+                        <div className="mt-2 rounded-lg bg-accent-soft/60 p-3 text-sm">
+                          <p>{explanations[c.id].explanation}</p>
+                          {explanations[c.id].examples.map((x, i) => <p key={i} className="mt-1 text-xs"><span className="line-through opacity-70">{x.weaker}</span> → <span className="font-medium">{x.stronger}</span></p>)}
+                          <p className="mt-1 text-xs text-ink-3">Basis: <ProvenanceBadge p={explanations[c.id].basis} />{explanations[c.id].demo ? " · demo mode" : ""}</p>
+                        </div>
+                      )}
                       {disputes.map((x) => (
                         <div key={x.id} className="mt-2 rounded-lg bg-surface-2 p-2 text-xs">
                           <p><span className="font-medium">Your objection:</span> {x.argument}</p>
@@ -155,6 +182,7 @@ export function AssessmentReport({ id }: { id: string }) {
                       ))}
                       {!c.withdrawn && (
                         <div className="mt-2 flex gap-3 text-xs">
+                          <button className="inline-flex items-center gap-1 text-ink-2 hover:text-ink" onClick={() => explain(c.id)}><HelpCircle className="size-3.5" aria-hidden /> {explaining === c.id ? "Thinking…" : "Why?"}</button>
                           <button className="inline-flex items-center gap-1 text-ink-2 hover:text-ink" onClick={() => setDispute({ commentId: c.id, mode: "dispute" })}><Flag className="size-3.5" aria-hidden /> I disagree</button>
                           <button className="inline-flex items-center gap-1 text-ink-2 hover:text-ink" onClick={() => setDispute({ commentId: c.id, mode: "unhelpful" })}><ThumbsDown className="size-3.5" aria-hidden /> Not helpful</button>
                         </div>
@@ -172,23 +200,7 @@ export function AssessmentReport({ id }: { id: string }) {
             </>
           )}
 
-          {tab === "lab" && (a.lab.length === 0 ? <Notice>No lab items in this assessment.</Notice> : a.lab.map((l, i) => (
-            <Card key={i}>
-              <p className="text-xs text-ink-3">Task {l.task} · your sentence</p>
-              <p className="mt-1"><q className="rounded bg-surface-2 px-1">{l.original}</q></p>
-              <ol className="mt-3 space-y-2 text-sm">
-                <li><Badge>1 · correct</Badge> {l.level1Correct}</li>
-                <li><Badge tone="navy">2 · stronger</Badge> {l.level2Stronger}</li>
-                {l.level3HighLevel && <li><Badge tone="sage">3 · high level</Badge> {l.level3HighLevel}</li>}
-              </ol>
-              <div className="mt-3 space-y-1 text-sm text-ink-2">
-                <p><span className="font-medium text-ink">Why it works:</span> {l.explanation.effective} {l.explanation.nuance}</p>
-                <p><span className="font-medium text-ink">In this context:</span> {l.explanation.whyInContext}</p>
-                {l.explanation.risks && <p><span className="font-medium text-ink">Watch out:</span> {l.explanation.risks}</p>}
-              </div>
-              <LabExercise ex={l.exercise} />
-            </Card>
-          )))}
+          {tab === "lab" && (a.lab.length === 0 ? <Notice>No lab items in this assessment.</Notice> : a.lab.map((l, i) => <LabItemCard key={i} item={l} />))}
 
           {tab === "model" && (
             <>
@@ -253,18 +265,5 @@ export function AssessmentReport({ id }: { id: string }) {
         <Textarea aria-label="Your reason" rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder={dispute?.mode === "dispute" ? "e.g. The task asked for an informal blog post, so contractions fit." : "e.g. Too picky; it does not affect the mark."} />
       </Dialog>
     </>
-  );
-}
-
-function LabExercise({ ex }: { ex: Assessment["lab"][number]["exercise"] }) {
-  const [answer, setAnswer] = useState("");
-  const [shown, setShown] = useState(false);
-  return (
-    <div className="mt-3 rounded-lg border border-line p-3 text-sm">
-      <p className="font-medium">Try it: {ex.instruction}</p>
-      {ex.material && <p className="mt-1 text-ink-2">{ex.material}</p>}
-      <Textarea aria-label="Your attempt" rows={2} className="mt-2" value={answer} onChange={(e) => setAnswer(e.target.value)} />
-      {ex.answerKey && (shown ? <p className="mt-2 text-ink-2">Suggestion: {ex.answerKey}</p> : <Button size="sm" className="mt-2" disabled={!answer.trim()} onClick={() => setShown(true)}>Compare with a suggestion</Button>)}
-    </div>
   );
 }
