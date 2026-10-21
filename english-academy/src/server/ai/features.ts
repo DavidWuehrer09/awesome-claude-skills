@@ -190,7 +190,7 @@ export const promptOutput = z.object({
   maxWords: z.number().nullable(),
   notes: z.string(),
 });
-export type PromptInput = { section: string; taskType: string; topic: string; difficulty: string; targetWords: string[]; minutes: number | null };
+export type PromptInput = { section: string; taskType: string; topic: string; difficulty: string; targetWords: string[]; minutes: number | null; targetLength?: number | null };
 
 // ---------------------------------------------------------------- mind maps & challenges
 
@@ -335,10 +335,10 @@ Rules:
   } satisfies Feature<AssessInput, typeof assessOutput>,
 
   writingPrompt: {
-    id: "writingPrompt", version: "writingPrompt@1", schema: promptOutput, effort: "medium", maxTokens: 6000,
+    id: "writingPrompt", version: "writingPrompt@2", schema: promptOutput, effort: "medium", maxTokens: 6000,
     system: `${TEACHING_PRINCIPLES}
 Task: create an original writing task. If a source text is needed (analysis, literary, comparison, mediation), WRITE AN ORIGINAL TEXT yourself (300-700 words for analysis, German for mediation) and set sourceLabel to "Original text written for this exercise (fictional)". Never attribute it to a real author or publication and never reproduce copyrighted material. Instructions must be complete and unambiguous, with operators as used in German upper-secondary English exams (summarise, analyse, assess, comment, discuss, mediate …).`,
-    user: (i: PromptInput) => `Section: ${i.section}\nTask type: ${i.taskType}\nTopic: ${i.topic}\nDifficulty: ${i.difficulty}\nTime: ${i.minutes ?? "untimed"} min\nVocabulary to encourage (only where natural): ${json(i.targetWords)}`,
+    user: (i: PromptInput) => `Section: ${i.section}\nTask type: ${i.taskType}\nTopic: ${i.topic}\nDifficulty: ${i.difficulty}\nTime: ${i.minutes ?? "untimed"} min\nTarget length: ${i.targetLength ? `about ${i.targetLength} words (state it in the instructions; minWords/maxWords within ±10%)` : "typical for the task type"}\nVocabulary to encourage (only where natural): ${json(i.targetWords)}`,
     check: (_i: PromptInput, o) => (o.sourceText && !/fictional|written for this exercise/i.test(o.sourceLabel ?? "") ? ["source text must be labelled as original"] : []),
     demo: () => {
       throw new Error("demo_unsupported");

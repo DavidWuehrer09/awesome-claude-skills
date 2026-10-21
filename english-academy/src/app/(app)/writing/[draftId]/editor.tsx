@@ -1,12 +1,14 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowLeft, Check, CloudOff, History, Pause, Play, Send, Timer } from "lucide-react";
+import { ArrowLeft, Check, CloudOff, History, Pause, Play, Send, Sparkles, Timer, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LabItemCard } from "@/components/examiner/lab-item";
 import { SourceText } from "@/components/writing/source-text";
 import { Badge, Button, Card, Input, Notice, Spinner, useToast } from "@/components/ui";
+import type { Assessment } from "@/domain/examiner/model";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { inflectionPattern, wordCount } from "@/lib/text";
 
@@ -16,6 +18,16 @@ type Prompt = {
 };
 type Draft = { id: string; title: string; body: string; version: number; elapsedSeconds: number; timerStartedAt: string | null; updatedAt: string };
 type Sub = { id: string; versionNo: number; wordCount: number; createdAt: string; assessmentStatus: string | null };
+
+type LabResult = { items: Assessment["lab"]; overall: string; demo: boolean };
+
+/** The selected text, or the paragraph around the cursor when nothing is selected. */
+function selectedPassage(body: string, start: number, end: number): string {
+  if (end > start) return body.slice(start, end).trim();
+  const from = body.lastIndexOf("\n", start - 1) + 1;
+  const to = body.indexOf("\n", start);
+  return body.slice(from, to === -1 ? body.length : to).trim();
+}
 
 const PASSES = ["Grammar and spelling", "Sentence structure", "Vocabulary and collocations", "Logical progression", "Precision and concision", "Overall argument quality"];
 
@@ -35,6 +47,7 @@ export function DraftEditor({ id }: { id: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const version = useRef(1);
+  const textRef = useRef<HTMLTextAreaElement>(null);
   const latest = useRef({ body: "", title: "", elapsed: 0 });
   const LOCAL_KEY = `draft-backup:${id}`;
 
@@ -205,6 +218,7 @@ export function DraftEditor({ id }: { id: string }) {
             </div>
           )}
           <textarea
+            ref={textRef}
             value={body}
             onChange={(e) => editText({ body: e.target.value })}
             aria-label="Your text"
@@ -223,8 +237,69 @@ export function DraftEditor({ id }: { id: string }) {
             </div>
           </div>
           <p className="text-xs text-ink-3">Autosaves while you type. Submitting stores this version unchanged; revisions become new versions you can compare.</p>
+          <SelectionFeedback textRef={textRef} prompt={prompt} />
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Targeted feedback on one passage while drafting, via the Improvement Lab
+ * (/api/examiner/lab) with the task's source text as context and its task type.
+ */
+function SelectionFeedback({ textRef, prompt }: { textRef: React.RefObject<HTMLTextAreaElement | null>; prompt: Prompt | null }) {
+  const toast = useToast();
+  const [question, setQuestion] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [passage, setPassage] = useState<string | null>(null);
+  const [result, setResult] = useState<LabResult | null>(null);
+
+  const run = async () => {
+    const el = textRef.current;
+    if (!el) return;
+    const text = selectedPassage(el.value, el.selectionStart, el.selectionEnd);
+    if (text.length < 10) {
+      toast({ tone: "warn", text: "Select a sentence or paragraph first (or place the cursor in a paragraph)." });
+      return;
+    }
+    setBusy(true);
+    setResult(null);
+    setPassage(text);
+    try {
+      setResult(await api<LabResult>("/api/examiner/lab", {
+        method: "POST",
+        json: { text: text.slice(0, 20_000), taskType: prompt?.taskType ?? null, context: prompt?.sourceText ?? null, focus: question.trim() || null },
+      }));
+    } catch (e) {
+      toast({ tone: "danger", text: errorMessage(e) });
+      setPassage(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="space-y-3">
+      <div>
+        <h2 className="text-base font-semibold">Feedback on selection</h2>
+        <p className="text-sm text-ink-2">Select a sentence or paragraph in your text (or just place the cursor in a paragraph) and get targeted feedback on that passage only.</p>
+      </div>
+      <Input aria-label="Your question (optional)" value={question} maxLength={300} onChange={(e) => setQuestion(e.target.value)} placeholder="Optional question, e.g. Why is this construction weak?" />
+      {/* preventDefault on mousedown keeps the textarea's selection when the button is pressed */}
+      <Button onMouseDown={(e) => e.preventDefault()} onClick={run} loading={busy}><Sparkles className="size-4" aria-hidden /> Get feedback on this passage</Button>
+      {passage && result && (
+        <div className="space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm text-ink-3">Passage: <q className="text-ink-2">{passage.length > 160 ? `${passage.slice(0, 160)}…` : passage}</q></p>
+            <Button size="sm" variant="ghost" aria-label="Close feedback" onClick={() => { setResult(null); setPassage(null); }}><X className="size-4" /></Button>
+          </div>
+          {result.demo ? <Notice tone="warn" title="Demo mode">{result.overall}</Notice> : result.overall && <Notice tone="accent">{result.overall}</Notice>}
+          {result.items.map((item, i) => <LabItemCard key={i} item={item} />)}
+          {!result.demo && !result.items.length && <p className="text-sm text-ink-3">No specific passage needed improvement.</p>}
+          <p className="text-xs text-ink-3">AI feedback can be wrong. It counts towards your assessment allowance.</p>
+        </div>
+      )}
+    </Card>
   );
 }

@@ -1,13 +1,13 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowLeft, Check, HelpCircle, MessageSquareWarning, PenLine, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, HelpCircle, MessageSquareWarning, PenLine, RefreshCw, ThumbsDown, ThumbsUp, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SourceText } from "@/components/writing/source-text";
 import { Badge, Button, Card, Dialog, LinkButton, Notice, Select, Spinner, Textarea, Toggle, useToast } from "@/components/ui";
 import { DIMENSION_LABEL } from "@/domain/writing/rubrics";
-import { api, errorMessage } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { wordDiff } from "@/lib/diff";
 
 type Annotation = { id: string; excerpt: string; category: string; priority: string; isError: boolean; explanation: string; suggestion: string; question: string | null };
@@ -27,8 +27,11 @@ type Data = {
   prompt: { title: string; section: string; taskType: string; instructions: string; sourceText: string | null; sourceLabel: string | null; answerKey: string | null; minWords: number | null; maxWords: number | null } | null;
   responses: { annotationId: string; action: string; message: string | null; reply: { decision?: string; explanation?: string; revisedSuggestion?: string | null; demo?: boolean } | null }[];
   versions: { id: string; versionNo: number }[];
-  vocabularyUsed: { id: string; headword: string }[];
+  /** status: the assessment's judgement of the word (null until a real assessment exists). */
+  vocabularyUsed: { id: string; headword: string; status: "correct" | "unnatural" | "incorrect" | "used" | null }[];
 };
+type Applied = { status: "applied" | "not_found" | "ambiguous"; message: string } | null;
+const WORD_TONE = { correct: "sage", used: "neutral", unnatural: "warn", incorrect: "danger" } as const;
 
 const PRIORITY_ORDER = ["meaning", "serious_grammar", "vocabulary_misuse", "unnatural", "structural", "optional"];
 const PRIORITY_LABEL: Record<string, string> = {
@@ -74,6 +77,8 @@ export function SubmissionReport({ id }: { id: string }) {
   const [argument, setArgument] = useState("");
   const [compareWith, setCompareWith] = useState("");
   const [compareBody, setCompareBody] = useState<string | null>(null);
+  const [applying, setApplying] = useState<{ a: Annotation; replacement: string; draftVersion: number | null } | null>(null);
+  const [applyBusy, setApplyBusy] = useState(false);
 
   const load = useCallback(() => api<Data>(`/api/writing/submissions/${id}`).then(setData).catch((e) => setError(errorMessage(e))), [id]);
   useEffect(() => void load(), [load]);
@@ -96,16 +101,39 @@ export function SubmissionReport({ id }: { id: string }) {
     }
   };
 
-  const respond = async (a: Annotation, action: "understood" | "accepted" | "rejected" | "challenge" | "clarify", message?: string) => {
+  const respond = async (a: Annotation, action: "understood" | "accepted" | "rejected" | "challenge" | "clarify", message?: string, apply?: { replacement: string; draftVersion: number }) => {
     if (!data?.assessment) return;
     try {
-      await api(`/api/writing/assessments/${data.assessment.id}/feedback`, { method: "POST", json: { annotationId: a.id, action, message } });
+      const r = await api<{ applied: Applied }>(`/api/writing/assessments/${data.assessment.id}/feedback`, { method: "POST", json: { annotationId: a.id, action, message, apply } });
       if (action === "challenge" || action === "clarify") setChallenge(null);
       setArgument("");
+      if (r.applied) toast({ tone: r.applied.status === "applied" ? "sage" : "warn", text: r.applied.message });
       await load();
+      return true;
+    } catch (e) {
+      toast({ tone: "danger", text: e instanceof ApiError && e.status === 409 ? "Your draft changed in the meantime. Nothing was applied; open the suggestion again to retry." : errorMessage(e) });
+      return false;
+    }
+  };
+
+  /** Accepting a suggestion offers to apply it: the replacement is editable because suggestions are not always literal text. */
+  const openApply = async (a: Annotation) => {
+    const revised = [...(data?.responses ?? [])].reverse().find((x) => x.annotationId === a.id && x.reply?.revisedSuggestion)?.reply?.revisedSuggestion;
+    setApplying({ a, replacement: revised ?? a.suggestion, draftVersion: null });
+    try {
+      const d = await api<{ draft: { version: number } }>(`/api/writing/drafts/${data!.submission.draftId}`);
+      setApplying((cur) => (cur && cur.a.id === a.id ? { ...cur, draftVersion: d.draft.version } : cur));
     } catch (e) {
       toast({ tone: "danger", text: errorMessage(e) });
+      setApplying(null);
     }
+  };
+  const confirmApply = async (toDraft: boolean) => {
+    if (!applying) return;
+    setApplyBusy(true);
+    const ok = await respond(applying.a, "accepted", undefined, toDraft && applying.draftVersion ? { replacement: applying.replacement, draftVersion: applying.draftVersion } : undefined);
+    setApplyBusy(false);
+    if (ok || toDraft) setApplying(null);
   };
 
   if (error) return <Notice tone="danger">{error}</Notice>;
@@ -209,7 +237,8 @@ export function SubmissionReport({ id }: { id: string }) {
                       <Button size="sm" variant={last?.action === "understood" ? "primary" : "secondary"} onClick={() => respond(a, "understood")}><Check className="size-3.5" aria-hidden /> Understood</Button>
                       <Button size="sm" onClick={() => setChallenge({ a, mode: "clarify" })}><HelpCircle className="size-3.5" aria-hidden /> Explain more</Button>
                       <Button size="sm" onClick={() => setChallenge({ a, mode: "challenge" })}><MessageSquareWarning className="size-3.5" aria-hidden /> I disagree</Button>
-                      {!a.isError && <Button size="sm" variant="ghost" onClick={() => respond(a, "accepted")} aria-label="Accept suggestion"><ThumbsUp className="size-3.5" /></Button>}
+                      {a.isError && <Button size="sm" onClick={() => void openApply(a)}><Wand2 className="size-3.5" aria-hidden /> Fix in draft</Button>}
+                      {!a.isError && <Button size="sm" variant={last?.action === "accepted" ? "primary" : "ghost"} onClick={() => void openApply(a)} aria-label="Accept suggestion"><ThumbsUp className="size-3.5" /></Button>}
                       {!a.isError && <Button size="sm" variant="ghost" onClick={() => respond(a, "rejected")} aria-label="Reject suggestion"><ThumbsDown className="size-3.5" /></Button>}
                     </div>
                   </Card>
@@ -249,7 +278,24 @@ export function SubmissionReport({ id }: { id: string }) {
                 <div className="mt-3 text-sm"><p className="text-ink-3">Simpler would be better:</p>
                   <ul className="list-disc pl-5">{r.vocabulary.simplerBetter.map((s, i) => <li key={i}>“{s.excerpt}” → {s.simpler}</li>)}</ul></div>
               )}
-              {data.vocabularyUsed.length > 0 && <p className="mt-3 text-sm text-ink-3">Words from your vocabulary in this text: {data.vocabularyUsed.map((v) => v.headword).join(", ")}</p>}
+              {data.vocabularyUsed.length > 0 && (
+                <div className="mt-3 text-sm">
+                  <p className="text-ink-3">Words from your vocabulary in this text{assessment?.isDemo ? " (use not judged in demo mode)" : ""}:</p>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {data.vocabularyUsed.map((v) => <Badge key={v.id} tone={v.status ? WORD_TONE[v.status] : "neutral"} title={v.status ?? undefined}>{v.headword}{v.status && v.status !== "used" ? ` · ${v.status}` : ""}</Badge>)}
+                  </div>
+                  {!assessment?.isDemo && <p className="mt-1 text-xs text-ink-3">Each counts as writing practice for that word; words the feedback did not comment on get a smaller credit.</p>}
+                </div>
+              )}
+              {(() => {
+                const misused = data.vocabularyUsed.filter((v) => v.status === "incorrect" || v.status === "unnatural");
+                return misused.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-line p-3 text-sm">
+                    <p>Misused or unnatural here: <strong>{misused.map((v) => v.headword).join(", ")}</strong></p>
+                    <LinkButton size="sm" className="mt-2" href={`/learn/session?mode=practice&ids=${misused.map((v) => v.id).join(",")}`}><BookOpen className="size-4" aria-hidden /> Practise the words you misused</LinkButton>
+                  </div>
+                );
+              })()}
             </Card>
             <Card>
               <h2 className="text-lg">Practise the weakest skill</h2>
@@ -300,6 +346,19 @@ export function SubmissionReport({ id }: { id: string }) {
           <div className="mt-3"><SourceText text={prompt.sourceText} label={prompt.sourceLabel} /></div>
         </details>
       )}
+
+      <Dialog open={!!applying} onClose={() => setApplying(null)} title={applying?.a.isError ? "Fix this in your draft" : "Accept this suggestion"}
+        footer={<>
+          <Button onClick={() => setApplying(null)}>Cancel</Button>
+          {!applying?.a.isError && <Button onClick={() => void confirmApply(false)} disabled={applyBusy}>Accept only</Button>}
+          <Button variant="primary" onClick={() => void confirmApply(true)} loading={applyBusy} disabled={!applying?.draftVersion || !applying.replacement.trim()}>Apply to draft</Button>
+        </>}>
+        <p className="text-sm text-ink-2">Replace in your latest draft:</p>
+        <p className="mt-1 font-display">“{applying?.a.excerpt}”</p>
+        <label htmlFor="apply-replacement" className="mt-3 block text-sm text-ink-2">with</label>
+        <Textarea id="apply-replacement" rows={3} value={applying?.replacement ?? ""} onChange={(e) => setApplying((cur) => (cur ? { ...cur, replacement: e.target.value } : cur))} />
+        <p className="mt-2 text-xs text-ink-3">Suggestions are sometimes advice rather than ready-made text: check the wording before applying. The passage is only replaced if it occurs exactly once in your draft; this version stays unchanged.</p>
+      </Dialog>
 
       <Dialog open={!!challenge} onClose={() => setChallenge(null)} title={challenge?.mode === "challenge" ? "Why do you disagree?" : "What is unclear?"}
         footer={<><Button onClick={() => setChallenge(null)}>Cancel</Button><Button variant="primary" onClick={() => challenge && respond(challenge.a, challenge.mode, argument || undefined)} disabled={challenge?.mode === "challenge" && !argument.trim()}>Send</Button></>}>

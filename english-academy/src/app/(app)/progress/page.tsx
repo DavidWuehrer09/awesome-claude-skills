@@ -123,6 +123,10 @@ export default async function ProgressPage() {
                     </span>
                   </div>
                   <p className="text-ink-3">{p.practice}</p>
+                  <p className="flex flex-wrap gap-3 text-xs">
+                    <Link className="text-navy underline" href={`/writing/new?section=sentence&focus=${p.category}`}>Sentence Lab</Link>
+                    <Link className="text-navy underline" href={p.drillHref}>Targeted drills</Link>
+                  </p>
                   {p.nextRevisit && <p className="text-xs text-ink-3">Next revisit: {new Date(p.nextRevisit).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</p>}
                 </li>
               ))}

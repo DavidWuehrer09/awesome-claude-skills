@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge, Card, LinkButton, PageHeader } from "@/components/ui";
 import { getDb } from "@/db/client";
 import { LIBRARY, SENTENCE_LAB } from "@/domain/writing/library";
+import { drillHref } from "@/domain/writing/rubrics";
 import { requireUser } from "@/server/auth";
 import { errorPatterns, listDrafts } from "@/server/repos/writing";
 
@@ -10,7 +11,7 @@ export const metadata = { title: "Writing Lab" };
 export const dynamic = "force-dynamic";
 
 const SECTIONS = [
-  { id: "sentence", letter: "A", title: "Sentence Laboratory", text: "Precision, redundancy, combining, syntax variety, register, nuance.", extra: `${SENTENCE_LAB.length} exercises` },
+  { id: "sentence", letter: "A", title: "Sentence Laboratory", text: "Precision, redundancy, combining, syntax variety, register, nuance, articles, prepositions, verb patterns.", extra: `${SENTENCE_LAB.length} exercises` },
   { id: "paragraph", letter: "B", title: "Paragraph Workshop", text: "Topic sentence, claim, evidence, explanation, qualification, link." },
   { id: "vocab_context", letter: "C", title: "Academic Vocabulary in Context", text: "Use selected words naturally; see which fitted and which felt forced." },
   { id: "argument", letter: "D", title: "Argumentation Studio", text: "Thesis, counterargument, concession without surrender, conclusions." },
@@ -71,7 +72,10 @@ export default async function WritingLab() {
                   <li key={p.category}>
                     <div className="flex justify-between gap-2"><span className="font-medium">{p.category.replace("_", " ")}</span><span className="text-ink-3">{p.submissionsAffected} text{p.submissionsAffected === 1 ? "" : "s"}</span></div>
                     {p.examples[0] && <p className="truncate text-xs text-ink-3">e.g. “{p.examples[0]}”</p>}
-                    <Link className="text-xs text-navy underline" href={`/writing/new?section=sentence&focus=${p.category}`}>Targeted practice</Link>
+                    <span className="flex flex-wrap gap-3">
+                      <Link className="text-xs text-navy underline" href={`/writing/new?section=sentence&focus=${p.category}`}>Targeted practice</Link>
+                      <Link className="text-xs text-navy underline" href={drillHref(p.category)}>Drills</Link>
+                    </span>
                   </li>
                 ))}
               </ul>

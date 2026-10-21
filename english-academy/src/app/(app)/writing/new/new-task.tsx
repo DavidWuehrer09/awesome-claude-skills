@@ -19,6 +19,7 @@ const SECTION_TITLE: Record<string, string> = {
 const FOCUS_MATCH: Record<string, string[]> = {
   word_choice: ["Precision"], concision: ["Concision", "Redundancy"], sentence_structure: ["Combining", "Syntax"], register: ["Register"],
   collocations: ["Collocation"], argumentation: ["hedging"], cohesion: ["Transitions"],
+  articles: ["Articles"], prepositions: ["Prepositions"], verb_patterns: ["Verb patterns"],
 };
 
 export function NewWritingTask() {
@@ -27,16 +28,19 @@ export function NewWritingTask() {
   const toast = useToast();
   const section = params.get("section") ?? "essay";
   const focus = params.get("focus");
+  // ?taskType=… (e.g. from the Abitur page's "Generate" buttons) pre-selects the type and opens the AI form.
+  const presetType = TASK_TYPES.find((t) => t.id === params.get("taskType"))?.id ?? null;
   const [lib, setLib] = useState<LibItem[]>([]);
   const [lab, setLab] = useState<LabItem[]>([]);
-  const [tab, setTab] = useState<"library" | "ai" | "own">("library");
+  const [tab, setTab] = useState<"library" | "ai" | "own">(presetType ? "ai" : "library");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // AI / own form state
-  const [taskType, setTaskType] = useState(section === "paragraph" || section === "vocab_context" ? "paragraph" : section === "sentence" ? "sentence" : "comment");
+  const [taskType, setTaskType] = useState<string>(presetType ?? (section === "paragraph" || section === "vocab_context" ? "paragraph" : section === "sentence" ? "sentence" : "comment"));
   const [topic, setTopic] = useState("");
   const [difficulty, setDifficulty] = useState("C1");
   const [minutes, setMinutes] = useState(section === "timed" ? 30 : 0);
+  const [targetLength, setTargetLength] = useState("");
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [source, setSource] = useState("");
@@ -175,9 +179,12 @@ export function NewWritingTask() {
             <Field label="Topic" htmlFor="topic"><Input id="topic" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. AI and the future of work" /></Field>
             <Field label="Difficulty" htmlFor="diff"><Select id="diff" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}><option>B2</option><option>C1</option><option>C2</option></Select></Field>
             <Field label="Time limit (0 = untimed)" htmlFor="min"><Input id="min" type="number" min={0} max={300} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} /></Field>
+            <Field label="Target length in words (optional)" htmlFor="len" hint="The task asks for about this many words (±10%). Empty = a typical length for the task type.">
+              <Input id="len" type="number" min={20} max={1500} step={10} value={targetLength} onChange={(e) => setTargetLength(e.target.value)} placeholder="e.g. 300" />
+            </Field>
           </div>
           <Button variant="primary" loading={busy === "ai"} disabled={topic.trim().length < 2}
-            onClick={() => create({ origin: "ai", section, taskType, topic, difficulty, minutes: minutes || null, targetEntryIds: [...picked].slice(0, 8) }, "ai")}>
+            onClick={() => create({ origin: "ai", section, taskType, topic, difficulty, minutes: minutes || null, targetLength: Number(targetLength) || null, targetEntryIds: [...picked].slice(0, 8) }, "ai")}>
             <Sparkles className="size-4" aria-hidden /> Generate task
           </Button>
         </Card>

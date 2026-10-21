@@ -50,7 +50,7 @@ export default async function AbiturPage() {
               <h3 className="text-lg">{t.label}</h3>
               <p className="mt-1 flex-1 text-sm text-ink-2">{DESCRIPTIONS[t.id]}</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <LinkButton size="sm" href={`/writing/new?section=abitur`}><Sparkles className="size-3.5" aria-hidden /> Generate</LinkButton>
+                <LinkButton size="sm" href={`/writing/new?section=abitur&taskType=${t.id}`}><Sparkles className="size-3.5" aria-hidden /> Generate</LinkButton>
                 {LIBRARY.some((l) => l.taskType === t.id && (l.section === "abitur" || l.section === "timed")) && <Badge tone="navy">ready-made task available</Badge>}
               </div>
             </Card>
