@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Merge, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Merge, Pencil, Plus, Split, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { flattenTopics, TopicSelect, type TopicNode } from "@/components/vocab/topic-select";
@@ -18,6 +18,10 @@ export default function TopicsPage() {
   const [editParent, setEditParent] = useState("");
   const [mergeFrom, setMergeFrom] = useState<TopicNode | null>(null);
   const [mergeTo, setMergeTo] = useState("");
+  const [splitFrom, setSplitFrom] = useState<TopicNode | null>(null);
+  const [splitName, setSplitName] = useState("");
+  const [splitWords, setSplitWords] = useState<{ id: string; headword: string; translationDe: string | null; definitionEn: string | null }[] | null>(null);
+  const [splitPick, setSplitPick] = useState<Set<string>>(new Set());
 
   const load = useCallback(() => api<{ topics: TopicNode[] }>("/api/topics").then((r) => setTopics(r.topics)).catch((e) => toast({ tone: "danger", text: errorMessage(e) })), [toast]);
   useEffect(() => void load(), [load]);
@@ -27,12 +31,33 @@ export default function TopicsPage() {
       await fn();
       toast({ tone: "sage", text: ok });
       await load();
+      return true;
     } catch (e) {
       toast({ tone: "danger", text: errorMessage(e) });
+      return false;
     }
   };
 
   const flat = topics ? flattenTopics(topics) : [];
+
+  const openSplit = (t: TopicNode) => {
+    setSplitFrom(t);
+    setSplitName("");
+    setSplitWords(null);
+    setSplitPick(new Set());
+    api<{ items: { id: string; headword: string; translationDe: string | null; definitionEn: string | null }[] }>(`/api/vocab?topic=${t.id}&limit=1000`)
+      .then((r) => setSplitWords(r.items)).catch((e) => toast({ tone: "danger", text: errorMessage(e) }));
+  };
+  const togglePick = (id: string) => setSplitPick((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    return n;
+  });
+  const split = () => splitFrom && run(
+    () => api(`/api/topics/${splitFrom.id}/split`, { method: "POST", json: { name: splitName.trim(), entryIds: [...splitPick] } }),
+    `Subtopic “${splitName.trim()}” created and words moved`,
+  ).then((done) => done && setSplitFrom(null));
 
   return (
     <>
@@ -63,6 +88,7 @@ export default function TopicsPage() {
               {t.isSample && <Badge>sample</Badge>}
               <span className="text-sm text-ink-3">{t.count} words</span>
               <Button size="sm" variant="ghost" aria-label={`Edit ${t.name}`} onClick={() => { setEdit(t); setEditName(t.name); setEditParent(t.parentId ?? ""); }}><Pencil className="size-4" /></Button>
+              <Button size="sm" variant="ghost" aria-label={`Split ${t.name}`} title="Split: move some words into a new subtopic" onClick={() => openSplit(t)}><Split className="size-4" /></Button>
               <Button size="sm" variant="ghost" aria-label={`Merge ${t.name} into another topic`} onClick={() => { setMergeFrom(t); setMergeTo(""); }}><Merge className="size-4" /></Button>
               <Button size="sm" variant="ghost" aria-label={`Delete ${t.name}`} onClick={() => confirm(`Delete topic “${t.name}”? Its words stay in your vocabulary; subtopics move up one level.`) && run(() => api(`/api/topics/${t.id}`, { method: "DELETE" }), "Topic deleted")}><Trash2 className="size-4" /></Button>
             </li>
@@ -80,6 +106,27 @@ export default function TopicsPage() {
         footer={<><Button onClick={() => setMergeFrom(null)}>Cancel</Button><Button variant="primary" disabled={!mergeTo} onClick={() => mergeFrom && run(() => api("/api/topics/merge", { method: "POST", json: { sourceId: mergeFrom.id, targetId: mergeTo } }), "Topics merged").then(() => setMergeFrom(null))}>Merge</Button></>}>
         <p className="mb-3 text-sm text-ink-2">All words and subtopics move to the target; “{mergeFrom?.name}” is removed. Words are never duplicated.</p>
         <TopicSelect topics={(topics ?? []).filter((t) => t.id !== mergeFrom?.id)} value={mergeTo} onChange={setMergeTo} placeholder="Choose target topic" allowNone />
+      </Dialog>
+      <Dialog open={!!splitFrom} onClose={() => setSplitFrom(null)} title={`Split “${splitFrom?.name ?? ""}”`}
+        footer={<><Button onClick={() => setSplitFrom(null)}>Cancel</Button><Button variant="primary" disabled={!splitName.trim() || !splitPick.size} onClick={split}>Create subtopic and move {splitPick.size || ""}</Button></>}>
+        <p className="mb-3 text-sm text-ink-2">Creates a subtopic inside “{splitFrom?.name}” and moves the selected words into it. Words that only belong to an existing subtopic stay where they are.</p>
+        <Field label="Name of the new subtopic" htmlFor="sname"><Input id="sname" value={splitName} onChange={(e) => setSplitName(e.target.value)} placeholder="e.g. Elections" /></Field>
+        <p className="mt-4 mb-1 text-sm font-medium">Words to move {splitWords ? `(${splitPick.size} of ${splitWords.length} selected)` : ""}</p>
+        {!splitWords && <Spinner />}
+        {splitWords && !splitWords.length && <p className="text-sm text-ink-3">This topic has no words yet.</p>}
+        {splitWords && splitWords.length > 0 && (
+          <ul className="max-h-72 space-y-0.5 overflow-y-auto rounded-lg border border-line p-1">
+            {splitWords.map((w) => (
+              <li key={w.id}>
+                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-2">
+                  <input type="checkbox" checked={splitPick.has(w.id)} onChange={() => togglePick(w.id)} className="size-4 accent-[var(--navy)]" />
+                  <span className="font-display">{w.headword}</span>
+                  <span className="truncate text-sm text-ink-3">{w.translationDe ?? w.definitionEn ?? ""}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
       </Dialog>
     </>
   );

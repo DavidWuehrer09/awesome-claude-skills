@@ -5,9 +5,10 @@ import { FolderTree, Import, Plus, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { QuickAdd } from "@/components/vocab/quick-add";
 import { TopicSelect, type TopicNode } from "@/components/vocab/topic-select";
-import { Badge, Button, Dialog, EmptyState, Field, Input, LinkButton, PageHeader, Spinner, useToast } from "@/components/ui";
-import { api, ApiError, errorMessage } from "@/lib/api";
+import { Badge, Button, EmptyState, Input, LinkButton, PageHeader, Spinner, useToast } from "@/components/ui";
+import { api, errorMessage } from "@/lib/api";
 
 type Entry = {
   id: string; headword: string; partOfSpeech: string | null; translationDe: string | null; definitionEn: string | null; favorite: boolean; isSample: boolean;
@@ -208,55 +209,5 @@ function TopicTree({ nodes, active, onPick, depth = 0 }: { nodes: TopicNode[]; a
         </li>
       ))}
     </ul>
-  );
-}
-
-export function QuickAdd({ open, onClose, topics, defaultTopic, onCreated }: { open: boolean; onClose: () => void; topics: TopicNode[]; defaultTopic?: string; onCreated: (id: string) => void }) {
-  const [headword, setHeadword] = useState("");
-  const [meaning, setMeaning] = useState("");
-  const [topicId, setTopicId] = useState(defaultTopic ?? "");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
-
-  const save = async () => {
-    if (!headword.trim()) return setError("Enter a word or expression");
-    setBusy(true);
-    setError(null);
-    try {
-      const isGerman = /[äöüß]|\b(der|die|das|etw|jdn)\b/i.test(meaning);
-      const { entry } = await api<{ entry: { id: string } }>("/api/vocab", {
-        method: "POST",
-        json: { headword: headword.trim(), ...(meaning.trim() ? (isGerman ? { translationDe: meaning.trim() } : { definitionEn: meaning.trim() }) : {}), topicIds: topicId ? [topicId] : [] },
-      });
-      setHeadword("");
-      setMeaning("");
-      onCreated(entry.id);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409 && (e.details as { entryId?: string })?.entryId) {
-        setError(`${e.message}.`);
-        router.prefetch(`/vocabulary/${(e.details as { entryId: string }).entryId}`);
-      } else setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose} title="Add a word or expression"
-      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" onClick={save} loading={busy}>Add</Button></>}>
-      <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void save(); }}>
-        <Field label="Word, phrase, idiom or collocation" htmlFor="qa-head" error={error}>
-          <Input id="qa-head" value={headword} onChange={(e) => setHeadword(e.target.value)} placeholder="e.g. to shed light on" autoFocus />
-        </Field>
-        <Field label="Meaning (optional)" htmlFor="qa-mean" hint="German translation or English definition. You can enrich the rest afterwards.">
-          <Input id="qa-mean" value={meaning} onChange={(e) => setMeaning(e.target.value)} placeholder="e.g. Licht in etw. bringen" />
-        </Field>
-        <Field label="Topic" htmlFor="qa-topic">
-          <TopicSelect id="qa-topic" topics={topics} value={topicId} onChange={setTopicId} />
-        </Field>
-        <button type="submit" hidden />
-      </form>
-    </Dialog>
   );
 }

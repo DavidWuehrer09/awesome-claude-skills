@@ -12,6 +12,7 @@ import {
   vocabEntries,
   vocabExamples,
   vocabLinks,
+  writingDrafts,
 } from "@/db/schema";
 import { levenshtein, normalizeHeadword } from "@/lib/text";
 import { conflict, notFound, badRequest } from "../http";
@@ -246,20 +247,35 @@ export async function listEntries(
   return { rows, total: count };
 }
 
+/** Short excerpt of `text` around the first match of `query` (case-insensitive). */
+export function snippetAround(text: string, query: string, radius = 60) {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const at = flat.toLowerCase().indexOf(query.toLowerCase());
+  if (at < 0) return flat.slice(0, radius * 2);
+  const start = Math.max(0, at - radius);
+  const end = Math.min(flat.length, at + query.length + radius);
+  return `${start > 0 ? "…" : ""}${flat.slice(start, end)}${end < flat.length ? "…" : ""}`;
+}
+
 export async function globalSearch(db: Db, userId: string, q: string) {
   const query = q.trim();
-  if (!query) return { entries: [], topics: [], tags: [] };
+  if (!query) return { entries: [], topics: [], tags: [], drafts: [] };
   const like = `%${query.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
-  const [{ rows }, topicRows, tagRows] = await Promise.all([
+  const [{ rows }, topicRows, tagRows, draftRows] = await Promise.all([
     listEntries(db, userId, { q: query, limit: 25 }),
     db.select().from(topics).where(and(eq(topics.userId, userId), ilike(topics.name, like))).limit(10),
     db.select().from(tags).where(and(eq(tags.userId, userId), ilike(tags.name, like))).limit(10),
+    // Writing drafts and notes: titles and bodies.
+    db.select({ id: writingDrafts.id, title: writingDrafts.title, body: writingDrafts.body, updatedAt: writingDrafts.updatedAt }).from(writingDrafts)
+      .where(and(eq(writingDrafts.userId, userId), or(ilike(writingDrafts.title, like), ilike(writingDrafts.body, like))))
+      .orderBy(desc(writingDrafts.updatedAt)).limit(10),
   ]);
   const norm = normalizeHeadword(query);
   const entries = rows
     .map((r) => r.entry)
     .sort((a, b) => Number(b.normalized.startsWith(norm)) - Number(a.normalized.startsWith(norm)));
-  return { entries, topics: topicRows, tags: tagRows };
+  const drafts = draftRows.map((d) => ({ id: d.id, title: d.title, updatedAt: d.updatedAt, snippet: snippetAround(d.body, query) }));
+  return { entries, topics: topicRows, tags: tagRows, drafts };
 }
 
 // ---------------------------------------------------------------- duplicates
@@ -383,6 +399,24 @@ export async function setMembership(db: Db, userId: string, entryIds: string[], 
   }
   await db.insert(topicMemberships).values(ids.map((entryId) => ({ userId, entryId, topicId }))).onConflictDoNothing();
   return ids.length;
+}
+
+/**
+ * Split a topic: create a subtopic inside it and move the selected words
+ * (direct members of the topic) into the subtopic.
+ */
+export async function splitTopic(db: Db, userId: string, topicId: string, input: { name: string; entryIds: string[] }) {
+  await assertTopicsOwned(db, userId, [topicId]);
+  if (!input.entryIds.length) throw badRequest("Select the words to move into the new subtopic");
+  const members = await db.select({ entryId: topicMemberships.entryId }).from(topicMemberships)
+    .where(and(eq(topicMemberships.userId, userId), eq(topicMemberships.topicId, topicId), inArray(topicMemberships.entryId, input.entryIds)));
+  if (!members.length) throw badRequest("None of the selected words belong directly to this topic");
+  return db.transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Db;
+    const sub = await createTopic(tx, userId, { name: input.name, parentId: topicId });
+    const moved = await setMembership(tx, userId, members.map((m) => m.entryId), sub.id, "move", topicId);
+    return { topic: sub, moved };
+  });
 }
 
 export async function listTags(db: Db, userId: string) {

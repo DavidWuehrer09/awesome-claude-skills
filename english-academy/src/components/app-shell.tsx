@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import {
-  BookOpen, ClipboardCheck, CloudOff, Gauge, GraduationCap, House, Layers, LineChart, LogOut, Menu, MessagesSquare, Network, PenLine, RefreshCw, Search, Settings, Target,
+  BookOpen, ClipboardCheck, CloudOff, Gauge, GraduationCap, House, Layers, LineChart, LogOut, Menu, MessagesSquare, Network, PenLine, Plus, RefreshCw, Search, Settings, Target, Wrench,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -10,6 +10,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import { api } from "@/lib/api";
 import { flushReviews, onQueueChange, pendingReviews } from "@/lib/offline";
 import { SearchDialog } from "./search-dialog";
+import { GlobalQuickAdd, openQuickAdd } from "./vocab/quick-add";
 import { ToastProvider } from "./ui";
 
 export const NAV = [
@@ -17,6 +18,7 @@ export const NAV = [
   { href: "/vocabulary", label: "My Vocabulary", icon: BookOpen },
   { href: "/learn", label: "Learn", icon: Layers },
   { href: "/practice", label: "Practice", icon: Target },
+  { href: "/tools", label: "Tools", icon: Wrench },
   { href: "/mind-maps", label: "Mind Maps", icon: Network },
   { href: "/writing", label: "Writing Lab", icon: PenLine },
   { href: "/tutor", label: "AI Tutor", icon: MessagesSquare },
@@ -158,6 +160,11 @@ export function AppShell({ children, user, isAdmin = false }: { children: ReactN
               <span className="truncate">Search words, topics, examples…</span>
               <kbd className="ml-auto hidden rounded border border-line px-1.5 text-[11px] lg:inline">⌘K</kbd>
             </button>
+            <button type="button" onClick={() => openQuickAdd()} title="Add word" aria-label="Add word"
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 text-sm text-ink-2 hover:border-line-strong hover:text-ink">
+              <Plus className="size-4" aria-hidden />
+              <span className="hidden sm:inline">Add word</span>
+            </button>
             <SyncStatus />
           </header>
 
@@ -209,6 +216,7 @@ export function AppShell({ children, user, isAdmin = false }: { children: ReactN
         </div>
       )}
       <SearchDialog open={search} onClose={() => setSearch(false)} />
+      <GlobalQuickAdd />
     </ToastProvider>
   );
 }

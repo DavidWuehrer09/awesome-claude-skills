@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import {
   learningStates,
@@ -10,7 +10,9 @@ import {
   topics,
   vocabEntries,
   writingAssessments,
+  writingDrafts,
   writingErrorPatterns,
+  writingPrompts,
   writingSubmissions,
 } from "@/db/schema";
 import { masteryLevel, overallMastery, type MasteryLevel } from "@/domain/learning/mastery";
@@ -186,6 +188,13 @@ export async function recommendations(db: Db, userId: string, now = new Date()):
   if (weakCol.length >= 3) {
     recs.push({ key: "collocations", title: "Practise collocations", detail: `${weakCol.length} familiar words still have weak collocations.`, href: "/practice/collocation", kind: "practice" });
   }
+  const confused = await db.select({ headword: vocabEntries.headword }).from(vocabEntries)
+    .innerJoin(learningStates, and(eq(learningStates.entryId, vocabEntries.id), eq(learningStates.userId, userId)))
+    .where(and(eq(vocabEntries.userId, userId), sql`jsonb_array_length(${vocabEntries.confusables}) > 0`, or(gte(learningStates.lapses, 1), eq(learningStates.markedDifficult, true))))
+    .limit(5);
+  if (confused.length) {
+    recs.push({ key: "confusables", title: "Compare words you often confuse", detail: `Side by side: ${confused.slice(0, 3).map((c) => c.headword).join(", ")} and their look-alikes.`, href: "/tools?tab=confusables", kind: "practice" });
+  }
   const due = await db.select().from(writingErrorPatterns).where(and(eq(writingErrorPatterns.userId, userId), lte(writingErrorPatterns.nextRevisit, now), gte(writingErrorPatterns.submissionsAffected, 2)));
   for (const p of due.slice(0, 2)) {
     recs.push({ key: `pattern-${p.category}`, title: `Revisit: ${CURRICULUM[p.category]?.label ?? p.category}`, detail: CURRICULUM[p.category]?.practice ?? "Targeted practice.", href: `/writing/new?section=sentence&focus=${p.category}`, kind: "writing" });
@@ -193,13 +202,29 @@ export async function recommendations(db: Db, userId: string, now = new Date()):
   if (counts.newAvailable > 0) {
     recs.push({ key: "new", title: `Learn ${counts.newAvailable} new word${counts.newAvailable === 1 ? "" : "s"}`, detail: "Within today's limit for new words.", href: "/learn/session?mode=mixed", kind: "review" });
   }
-  if (counts.settings.examDate) {
-    const days = Math.round((new Date(counts.settings.examDate).getTime() - now.getTime()) / 86400000);
-    if (days >= 0 && days <= 90) recs.push({ key: "abitur", title: `Exam in ${days} days: timed practice`, detail: "One timed Abitur-style task per week builds stamina.", href: "/abitur", kind: "abitur" });
+  const examDays = counts.settings.examDate ? Math.round((new Date(counts.settings.examDate).getTime() - now.getTime()) / 86400000) : null;
+  if (examDays !== null && examDays >= 0 && examDays <= 90) {
+    recs.push({ key: "abitur", title: `Exam in ${examDays} days: timed practice`, detail: "One timed Abitur-style task per week builds stamina.", href: "/abitur", kind: "abitur" });
+  }
+  // An unsubmitted literary or non-fiction analysis (touched in the last 3 weeks), or the exam is close.
+  const [analysisDraft] = await db.select({ title: writingDrafts.title }).from(writingDrafts)
+    .innerJoin(writingPrompts, eq(writingPrompts.id, writingDrafts.promptId))
+    .where(and(
+      eq(writingDrafts.userId, userId), gte(writingDrafts.updatedAt, new Date(now.getTime() - 21 * 86400000)),
+      sql`(${writingPrompts.taskType} ilike '%analysis%' or ${writingPrompts.taskType} ilike '%literary%' or ${writingPrompts.taskType} ilike '%characteris%')`,
+      sql`not exists (select 1 from ${writingSubmissions} ws where ws.draft_id = ${writingDrafts.id})`,
+    ))
+    .orderBy(desc(writingDrafts.updatedAt)).limit(1);
+  if (analysisDraft || (examDays !== null && examDays >= 0 && examDays <= 45)) {
+    recs.push({
+      key: "analytical-verbs", title: "Analytical verbs before your analysis",
+      detail: analysisDraft ? `For “${analysisDraft.title}”: convey, emphasise, evoke, undermine … with technique → evidence → effect.` : "Revise the phrases for analysing effect and quoting before the exam.",
+      href: "/tools?tab=phrases", kind: "writing",
+    });
   }
   const states = await db.select().from(recommendationStates).where(eq(recommendationStates.userId, userId));
   const hidden = new Set(states.filter((s) => s.status === "dismissed" || (s.status === "postponed" && s.until && s.until > now)).map((s) => s.key));
-  return recs.filter((r) => !hidden.has(r.key)).slice(0, 5);
+  return recs.filter((r) => !hidden.has(r.key)).slice(0, 6);
 }
 
 export async function setRecommendationState(db: Db, userId: string, key: string, status: "dismissed" | "postponed" | "done") {
