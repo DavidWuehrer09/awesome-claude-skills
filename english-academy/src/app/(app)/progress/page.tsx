@@ -78,13 +78,13 @@ export default async function ProgressPage() {
         {r.byTopic.length ? (
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[480px] text-sm">
-              <thead><tr className="text-left text-ink-3"><th className="py-2 font-normal">Topic</th><th className="font-normal">Words</th><th className="font-normal">Mastery (est.)</th><th className="font-normal">Accuracy 28 d</th><th /></tr></thead>
+              <thead><tr className="text-left text-ink-3"><th className="py-2 font-normal">Topic</th><th className="font-normal">Words</th><th className="pr-6 font-normal">Mastery (est.)</th><th className="font-normal">Accuracy 28 d</th><th /></tr></thead>
               <tbody>
                 {r.byTopic.map((t) => (
                   <tr key={t.id} className="border-t border-line">
                     <td className="py-2">{t.name}</td>
                     <td>{t.words}</td>
-                    <td className="w-40"><div className="flex items-center gap-2"><Meter value={t.mastery} label={`${t.name} mastery`} /><span className="text-ink-3">{t.mastery}%</span></div></td>
+                    <td className="w-48 pr-6"><div className="flex items-center gap-2"><Meter value={t.mastery} label={`${t.name} mastery`} /><span className="w-10 shrink-0 text-right tabular-nums text-ink-3">{t.mastery}%</span></div></td>
                     <td>{t.accuracy === null ? <span className="text-ink-3">–</span> : `${t.accuracy}% (${t.attempts})`}</td>
                     <td className="text-right"><Link className="text-navy underline" href={`/learn/session?mode=focused&topic=${t.id}`}>Practise</Link></td>
                   </tr>

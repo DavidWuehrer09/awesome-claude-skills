@@ -35,10 +35,6 @@ export function Trends() {
         {!data ? <Spinner /> : (
           <>
             <BarChart label="Answers per week" data={data.map((w) => ({ key: w.week, label: w.week.slice(5), value: w.reviews, detail: `${w.minutes} min${w.accuracy !== null ? ` · ${w.accuracy}% correct` : ""}` }))} />
-            <details className="mt-2 text-sm"><summary className="cursor-pointer text-ink-2">Show as table</summary>
-              <table className="mt-2 w-full text-sm"><thead><tr className="text-left text-ink-3"><th className="font-medium">Week from</th><th className="text-right font-medium">Answers</th><th className="text-right font-medium">Correct</th><th className="text-right font-medium">Minutes</th></tr></thead>
-                <tbody>{data.map((w) => <tr key={w.week}><td>{w.week}</td><td className="text-right tabular-nums">{w.reviews}</td><td className="text-right tabular-nums">{w.accuracy ?? "–"}{w.accuracy !== null ? "%" : ""}</td><td className="text-right tabular-nums">{w.minutes}</td></tr>)}</tbody></table>
-            </details>
           </>
         )}
       </Card>

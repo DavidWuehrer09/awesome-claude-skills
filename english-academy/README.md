@@ -83,8 +83,8 @@ About the local certificate:
 
 | Command | What | Last result (2026-10-20) |
 |---|---|---|
-| `npm test` | Unit + integration tests (FSRS, answer checking, parsing, time zones, examiner honesty checks, allowances and budgets, reminders, local HTTPS certificates, repositories on an in-memory Postgres) | 106 passed |
-| `npm run test:e2e` | Production build + Playwright: onboarding, import, study session, practice, mind map, writing, tutor, reminders, examiner flow, data isolation, admin access, iPhone layout | 16 passed |
+| `npm test` | Unit + integration tests (FSRS, answer checking, parsing, time zones, examiner honesty checks, allowances and budgets, reminders, local HTTPS certificates, repositories on an in-memory Postgres) | 145 passed |
+| `npm run test:e2e` | Production build + Playwright: onboarding, import, study session, practice, mind map, writing, tutor, reminders, examiner flow, data isolation, admin access, iPhone layout | 20 passed (desktop, iPhone and iPad sizes) |
 | `npm run lint`, `npm run typecheck` | ESLint, TypeScript | clean |
 
 ## Verified vs. not verified
