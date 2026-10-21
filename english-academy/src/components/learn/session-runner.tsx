@@ -1,12 +1,12 @@
 "use client";
 
 import clsx from "clsx";
-import { Check, ChevronRight, Edit3, Lightbulb, MessagesSquare, RotateCcw, Undo2, Volume2, X } from "lucide-react";
+import { Check, ChevronRight, Edit3, Flag, Lightbulb, MessagesSquare, RotateCcw, Undo2, Volume2, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Card, LinkButton, Meter, Notice, Textarea, useToast } from "@/components/ui";
 import { checkAnswer, verdictMessage, verdictToOutcome, type Tolerance, type Verdict } from "@/domain/learning/answers";
-import type { Exercise } from "@/domain/learning/exercises";
+import { ADAPTIVE_START_TIER, adaptiveTier, KIND_LABEL, pickVariant, type Exercise } from "@/domain/learning/exercises";
 import { RATING_LABELS } from "@/domain/learning/scheduler";
 import { api, errorMessage } from "@/lib/api";
 import { enqueueReview, flushReviews, newEventId, pendingReviews, removeReview } from "@/lib/offline";
@@ -20,6 +20,10 @@ type Evaluation = {
   targetWordUse: { word: string; used: boolean; correct: boolean | null; natural: boolean | null; comment: string }[];
 };
 type Logged = { clientEventId: string; cardIndex: number; outcome: Outcome };
+type AiCheck = { status: "busy" } | { status: "done"; acceptable: boolean; explanation: string };
+
+/** Typed kinds where a synonym/other translation can be a valid answer (not word forms). */
+const AI_CHECK_KINDS = new Set(["typed_de_en", "typed_definition", "cloze", "collocation", "meaning_en_de"]);
 
 const GRADES = [1, 2, 3, 4] as const;
 
@@ -34,13 +38,21 @@ function speak(text: string) {
 }
 
 export function SessionRunner({
-  cards: initialCards, title, tolerance = "normal", sessionMode, topicId, timerSeconds, onFinish, summaryExtra,
+  cards: initialCards, title, tolerance = "normal", sessionMode, topicId, timerSeconds, onFinish, summaryExtra, aiAnswerCheck = false, adaptive = false,
 }: {
   cards: RunnerCard[]; title: string; tolerance?: Tolerance; sessionMode: string; topicId?: string | null; timerSeconds?: number;
   onFinish?: (stats: Record<string, number>) => void; summaryExtra?: (log: { card: RunnerCard; outcome: Outcome }[]) => React.ReactNode;
+  /** A real AI provider is available: typed answers marked "wrong" get a semantic second check. */
+  aiAnswerCheck?: boolean;
+  /** Mixed Challenge: the next card's exercise kind follows the learner's recent results. */
+  adaptive?: boolean;
 }) {
   const toast = useToast();
-  const [cards, setCards] = useState(initialCards);
+  const [cards, setCards] = useState(() => {
+    const first = initialCards[0];
+    const start = adaptive && first?.variants?.length ? pickVariant(first.variants, ADAPTIVE_START_TIER) : undefined;
+    return start ? [{ ...first, exercise: start }, ...initialCards.slice(1)] : initialCards;
+  });
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("answer");
   const [flipped, setFlipped] = useState(false);
@@ -51,6 +63,9 @@ export function SessionRunner({
   const [evaluation, setEvaluation] = useState<{ data: Evaluation; demo: boolean } | null>(null);
   const [evalBusy, setEvalBusy] = useState(false);
   const [evalError, setEvalError] = useState<string | null>(null);
+  const [aiCheck, setAiCheck] = useState<AiCheck | null>(null);
+  const aiCheckFor = useRef<string | null>(null); // the card an AI check belongs to; stale results are ignored
+  const [difficult, setDifficult] = useState<Set<string>>(() => new Set());
   const [attempt, setAttempt] = useState(1);
   const [log, setLog] = useState<Logged[]>([]);
   const [results, setResults] = useState<{ card: RunnerCard; outcome: Outcome }[]>([]);
@@ -105,6 +120,8 @@ export function SessionRunner({
     setHints(0);
     setEvaluation(null);
     setEvalError(null);
+    setAiCheck(null);
+    aiCheckFor.current = null;
     setAttempt(1);
   };
 
@@ -141,15 +158,32 @@ export function SessionRunner({
     }
     setLog((l) => [...l, { clientEventId: ev.clientEventId, cardIndex: index, outcome }]);
     setResults((r) => [...r, { card, outcome }]);
-    // In-session relearning: failed words come back after a few cards (max twice), as practice.
-    if ((outcome === "wrong" || outcome === "revealed") && cards.filter((c) => c.exercise.entryId === ex.entryId).length < 3) {
+    // In-session relearning: failed words come back after a few cards (max twice), as practice,
+    // each time as a different exercise kind where the word supports one.
+    const seenOfEntry = cards.filter((c) => c.exercise.entryId === ex.entryId).length;
+    const retryNeeded = (outcome === "wrong" || outcome === "revealed") && seenOfEntry < 3;
+    if (retryNeeded || adaptive) {
       setCards((cs) => {
-        const at = Math.min(cs.length, index + 4);
-        const retry: RunnerCard = { ...card, schedule: false, reason: "retry" };
-        return [...cs.slice(0, at), retry, ...cs.slice(at)];
+        let out = cs;
+        if (retryNeeded) {
+          const at = Math.min(cs.length, index + 4);
+          const other = card.retries?.[seenOfEntry - 1];
+          const retry: RunnerCard = {
+            ...card, schedule: false, reason: "retry", intervals: null, variants: undefined,
+            ...(other ? { exercise: other, ai: undefined } : {}),
+          };
+          out = [...out.slice(0, at), retry, ...out.slice(at)];
+        }
+        // Mixed Challenge: two right in a row -> harder kind next, a mistake -> easier.
+        const nextCard = out[index + 1];
+        if (adaptive && nextCard?.variants?.length && nextCard.reason !== "retry") {
+          const v = pickVariant(nextCard.variants, adaptiveTier([...results.map((r) => r.outcome), outcome]));
+          if (v && v.id !== nextCard.exercise.id) out = [...out.slice(0, index + 1), { ...nextCard, exercise: v }, ...out.slice(index + 2)];
+        }
+        return out;
       });
     }
-  }, [card, ex, hints, index, studySessionId, cards, toast]);
+  }, [card, ex, hints, index, studySessionId, cards, toast, adaptive, results]);
 
   const next = () => {
     resetCard();
@@ -168,10 +202,53 @@ export function SessionRunner({
     const v = checkAnswer(typed, { ...ex.answer.spec, tolerance: ex.answer.spec.tolerance ?? tolerance });
     setVerdict(v);
     setPhase("feedback");
+    // Only a plain "wrong" gets a second opinion; typos, form errors and confusions are already explained.
+    if (v.kind === "wrong" && aiAnswerCheck && AI_CHECK_KINDS.has(ex.kind)) void checkWithAi(ex, typed.trim());
+  };
+
+  const checkWithAi = async (exercise: Exercise, answer: string) => {
+    if (exercise.answer.type !== "typed") return;
+    const key = `${index}:${exercise.id}`;
+    aiCheckFor.current = key;
+    setAiCheck({ status: "busy" });
+    try {
+      const r = await api<{ check: { acceptable: boolean; explanation: string }; meta: { demo: boolean } }>("/api/learn/check-answer", {
+        method: "POST",
+        json: {
+          exercise: `${exercise.title} (${KIND_LABEL[exercise.kind]})`, prompt: exercise.prompt, context: exercise.context ?? null,
+          targetWord: exercise.reveal.headword, expected: exercise.answer.spec.expected.slice(0, 12).map((e) => e.slice(0, 200)),
+          learnerAnswer: answer.slice(0, 120), answerLanguage: exercise.kind === "meaning_en_de" ? "de" : "en",
+        },
+      });
+      if (aiCheckFor.current !== key) return;
+      if (r.meta.demo) { setAiCheck(null); return; } // never a fake judgement: the local verdict stays
+      setAiCheck({ status: "done", acceptable: r.check.acceptable, explanation: r.check.explanation });
+      if (r.check.acceptable) setVerdict({ kind: "alternative", matched: answer });
+    } catch {
+      // AI unavailable, disabled or over the allowance: the deterministic verdict stands.
+      if (aiCheckFor.current === key) setAiCheck(null);
+    }
+  };
+
+  const toggleDifficult = async () => {
+    if (!ex) return;
+    const next = !difficult.has(ex.entryId);
+    try {
+      await api(`/api/vocab/${ex.entryId}/difficult`, { method: "POST", json: { difficult: next } });
+      setDifficult((d) => {
+        const s = new Set(d);
+        if (next) s.add(ex.entryId);
+        else s.delete(ex.entryId);
+        return s;
+      });
+      toast({ tone: next ? "sage" : "neutral", text: next ? `“${ex.reveal.headword}” marked as difficult: it will get extra practice.` : `“${ex.reveal.headword}” is no longer marked as difficult.` });
+    } catch (e) {
+      toast({ tone: "danger", text: errorMessage(e) });
+    }
   };
 
   const finishTyped = (selfRating?: 1 | 2 | 3 | 4) => once(async () => {
-    if (!verdict) return;
+    if (!verdict || aiCheck?.status === "busy") return;
     await record(verdictToOutcome(verdict), { selfRating, answer: typed });
     next();
   });
@@ -359,6 +436,10 @@ export function SessionRunner({
         <span className="text-sm text-ink-3">{index + 1} / {cards.length}</span>
         <div className="flex-1"><Meter value={progress} label="Session progress" /></div>
         {timerSeconds !== undefined && <Badge tone={timeLeft < 10 ? "danger" : "neutral"}>{timeLeft}s</Badge>}
+        <Button size="sm" variant="ghost" onClick={toggleDifficult} aria-pressed={difficult.has(ex!.entryId)}
+          title={difficult.has(ex!.entryId) ? "Marked as difficult (click to undo)" : "Mark this word as difficult"} aria-label="Mark this word as difficult">
+          <Flag className={clsx("size-4", difficult.has(ex!.entryId) && "fill-current text-danger")} />
+        </Button>
         <Button size="sm" variant="ghost" onClick={undo} disabled={!log.length} title="Undo last answer (Ctrl+Z)" aria-label="Undo last answer"><Undo2 className="size-4" /></Button>
         <LinkButton href="/learn" size="sm" variant="ghost">End</LinkButton>
       </div>
@@ -469,10 +550,18 @@ export function SessionRunner({
           <p className={clsx("font-medium", ["exact", "alternative"].includes(verdict.kind) ? "text-sage" : verdict.kind === "typo" || verdict.kind === "wrong_form" ? "text-warn" : "text-danger")}>
             {verdictMessage(verdict, ex!.answer.type === "typed" ? ex!.answer.spec.expected[0] : r.headword)}
           </p>
+          {aiCheck?.status === "busy" && <p className="mt-2 text-sm text-ink-3" role="status">Checking with AI whether your answer also fits here…</p>}
+          {aiCheck?.status === "done" && (
+            <p className="mt-2 text-sm text-ink-2">
+              <Badge tone={aiCheck.acceptable ? "sage" : "warn"}>AI check</Badge>{" "}
+              {aiCheck.acceptable ? "Your answer is also acceptable here (counts as at most Hard). " : "Not right in this context: "}
+              {aiCheck.explanation}
+            </p>
+          )}
           <RevealBlock ex={ex!} compact />
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap gap-2">
-              {(verdict.kind === "wrong" || verdict.kind === "confused") && typed.trim() && ex!.kind !== "cloze" && ex!.kind !== "collocation" && (
+              {(verdict.kind === "wrong" || verdict.kind === "confused") && typed.trim() && ex!.kind !== "cloze" && ex!.kind !== "collocation" && ex!.kind !== "meaning_en_de" && aiCheck?.status !== "busy" && (
                 <Button size="sm" variant="ghost" onClick={acceptMine} title="Adds your answer as an accepted alternative for this word">My answer is also correct</Button>
               )}
               <LinkButton size="sm" variant="ghost" href={`/tutor?attach=${ex!.entryId}&ask=${encodeURIComponent(`Explain the nuance of “${r.headword}”${typed ? ` and why “${typed}” does not fit here` : ""}.`)}`}><MessagesSquare className="size-4" aria-hidden /> Explain</LinkButton>
@@ -484,7 +573,7 @@ export function SessionRunner({
                 <Button size="sm" onClick={() => finishTyped(4)}>Easy</Button>
               </div>
             ) : (
-              <Button variant="primary" onClick={() => finishTyped()}>Continue <ChevronRight className="size-4" aria-hidden /></Button>
+              <Button variant="primary" onClick={() => finishTyped()} disabled={aiCheck?.status === "busy"}>Continue <ChevronRight className="size-4" aria-hidden /></Button>
             )}
           </div>
         </Card>

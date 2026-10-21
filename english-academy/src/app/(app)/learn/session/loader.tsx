@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SessionRunner } from "@/components/learn/session-runner";
@@ -16,19 +17,25 @@ export function SessionLoader() {
   const p = useSearchParams();
   const [data, setData] = useState<Built | null>(null);
   const [tolerance, setTolerance] = useState<Tolerance>("normal");
+  const [aiCheck, setAiCheck] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const mode = (p.get("mode") ?? "mixed") as "review" | "focused" | "mixed" | "practice";
   const topic = p.get("topic");
   const timer = p.get("timer") ? Number(p.get("timer")) : undefined;
   const check = p.get("check") === "1";
+  const adaptive = p.get("adaptive") === "1";
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const me = await api<{ settings: { typoTolerance: Tolerance } }>("/api/me").catch(() => null);
-        if (me) setTolerance(me.settings.typoTolerance);
+        const me = await api<{ settings: { typoTolerance: Tolerance; aiEnabled: boolean }; ai: { available: boolean; demo: boolean } }>("/api/me").catch(() => null);
+        if (me) {
+          setTolerance(me.settings.typoTolerance);
+          // The semantic answer check needs a real provider; demo mode never changes a verdict.
+          setAiCheck(me.settings.aiEnabled && me.ai.available && !me.ai.demo);
+        }
         let ids = p.get("ids")?.split(",").filter(Boolean);
         const list = p.get("list");
         if (list && !ids?.length) {
@@ -42,7 +49,7 @@ export function SessionLoader() {
         const kinds = p.get("kinds")?.split(",").filter(Boolean);
         const body = {
           mode, topicId: topic || null, minutes: p.get("minutes") ? Number(p.get("minutes")) : undefined,
-          entryIds: ids?.length ? ids : undefined, kinds: kinds?.length ? kinds : undefined,
+          entryIds: ids?.length ? ids : undefined, kinds: kinds?.length ? kinds : undefined, adaptive: adaptive || undefined,
         };
         let built: Built;
         if (check && ids?.length) {
@@ -73,7 +80,7 @@ export function SessionLoader() {
     return () => {
       cancelled = true;
     };
-  }, [p, mode, topic, check]);
+  }, [p, mode, topic, check, adaptive]);
 
   if (error) return <Notice tone="danger" title="Could not start the session">{error}</Notice>;
   if (!data) return <Spinner label="Preparing your session" />;
@@ -89,20 +96,34 @@ export function SessionLoader() {
         topicId={topic}
         timerSeconds={timer}
         summaryExtra={check ? (log) => <MasteryReport log={log} /> : undefined}
+        aiAnswerCheck={aiCheck}
+        adaptive={adaptive}
       />
     </>
   );
 }
 
-function MasteryReport({ log }: { log: { card: RunnerCard; outcome: string }[] }) {
+const SECURE = ["correct", "alternative", "typo"];
+
+function MasteryReport({ log: all }: { log: { card: RunnerCard; outcome: string }[] }) {
+  // Second chances after a miss are practice, not evidence of what was secure.
+  const log = all.filter((l) => l.card.reason !== "retry");
   const byDim = new Map<string, { ok: number; n: number }>();
+  const byWord = new Map<string, { headword: string; weak: Set<string>; n: number }>();
   for (const l of log) {
     const d = l.card.exercise.dimension;
+    const ok = SECURE.includes(l.outcome);
     const v = byDim.get(d) ?? { ok: 0, n: 0 };
     v.n++;
-    if (["correct", "alternative", "typo"].includes(l.outcome)) v.ok++;
+    if (ok) v.ok++;
     byDim.set(d, v);
+    const w = byWord.get(l.card.exercise.entryId) ?? { headword: l.card.exercise.reveal.headword, weak: new Set<string>(), n: 0 };
+    w.n++;
+    if (!ok) w.weak.add(d);
+    byWord.set(l.card.exercise.entryId, w);
   }
+  const label = (d: string) => DIMENSIONS.find((x) => x.key === d)?.label ?? d;
+  const words = [...byWord.entries()].sort((a, b) => b[1].weak.size - a[1].weak.size || a[1].headword.localeCompare(b[1].headword));
   return (
     <div className="mt-5">
       <h3 className="text-sm font-medium text-ink-2">By skill</h3>
@@ -117,6 +138,19 @@ function MasteryReport({ log }: { log: { card: RunnerCard; outcome: string }[] }
             </li>
           );
         })}
+      </ul>
+      <h3 className="mt-5 text-sm font-medium text-ink-2">Word by word</h3>
+      <ul className="mt-2 divide-y divide-line text-sm">
+        {words.map(([id, w]) => (
+          <li key={id} className="flex flex-wrap items-baseline justify-between gap-x-3 py-1.5">
+            <Link href={`/vocabulary/${id}`} className="font-display text-ink hover:underline">{w.headword}</Link>
+            {w.weak.size ? (
+              <span className="text-danger">weak: {[...w.weak].map(label).join(", ")}</span>
+            ) : (
+              <span className="text-sage">secure ({w.n} {w.n === 1 ? "test" : "tests"})</span>
+            )}
+          </li>
+        ))}
       </ul>
     </div>
   );

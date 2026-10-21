@@ -1,9 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { checkAnswer, normalizeAnswer } from "@/domain/learning/answers";
-import { chooseKind, evidenceFor, generateExercise, makeCloze, type EntryLite } from "@/domain/learning/exercises";
+import {
+  adaptiveTier,
+  adaptiveVariants,
+  availableKinds,
+  chooseKind,
+  evidenceFor,
+  generateExercise,
+  germanMeaningAnswers,
+  KIND_TIER,
+  makeCloze,
+  pickVariant,
+  retryExercises,
+  retryKinds,
+  type EntryLite,
+} from "@/domain/learning/exercises";
 import { applyEvidence, masteryLevel } from "@/domain/learning/mastery";
 import { deriveRating, makeScheduler, newSchedulingState, previewIntervals, Rating, schedule, State } from "@/domain/learning/scheduler";
-import { buildQueue, interleave, type QueueState } from "@/domain/learning/selection";
+import { buildQueue, examPrepActive, interleave, type QueueState } from "@/domain/learning/selection";
 
 const T0 = new Date("2026-03-10T08:00:00Z");
 const day = 86400000;
@@ -208,5 +222,121 @@ describe("queue", () => {
     const states = [base("weak", { due: new Date(T0.getTime() + 20 * day), stability: 20, mastery: { production: { score: 0.1, n: 2 } } })];
     const q = buildQueue(states, opts);
     expect(q.items).toEqual([{ entryId: "weak", reason: "weak_production", schedule: false }]);
+  });
+});
+
+describe("in-session retry", () => {
+  it("retries a missed word with different kinds, context recall first", () => {
+    const missed = generateExercise("flip_en_de", pool[0], pool, "s")!;
+    const retries = retryExercises(missed, pool[0], pool, "s");
+    expect(retries.map((r) => r.kind)).toEqual(["cloze", "collocation"]);
+    expect(retries.every((r) => r.entryId === "e1")).toBe(true);
+    expect(retryKinds("cloze", ["cloze", "collocation", "typed_de_en"])).toEqual(["collocation", "typed_de_en"]);
+  });
+  it("keeps a multi-kind restriction (sprint) and returns nothing when no other kind exists", () => {
+    expect(retryKinds("meaning_choice", availableKinds(pool[0], pool), ["meaning_choice", "typed_de_en"])).toEqual(["typed_de_en"]);
+    expect(retryKinds("production", ["production"])).toEqual([]);
+    // A single-kind practice mode may retry with any other kind the word supports.
+    expect(retryKinds("word_family", ["word_family", "cloze"], ["word_family"])).toEqual(["cloze"]);
+  });
+});
+
+describe("adaptive Mixed Challenge", () => {
+  it("moves up after two successes in a row and down after an error", () => {
+    expect(adaptiveTier([])).toBe(2);
+    expect(adaptiveTier(["correct"])).toBe(2);
+    expect(adaptiveTier(["correct", "typo"])).toBe(3);
+    expect(adaptiveTier(["correct", "correct", "correct", "correct", "correct", "correct"])).toBe(4);
+    expect(adaptiveTier(["correct", "correct", "wrong"])).toBe(2);
+    expect(adaptiveTier(["wrong", "revealed", "wrong"])).toBe(1);
+    expect(adaptiveTier(["correct", "partial", "correct"])).toBe(2);
+  });
+  it("offers one variant per tier and picks the closest (easier on a tie)", () => {
+    const variants = adaptiveVariants(pool[0], pool, "s");
+    expect(variants.map((v) => KIND_TIER[v.kind])).toEqual([1, 2, 3, 4]);
+    expect(adaptiveVariants(pool[0], pool, "s").map((v) => v.id)).toEqual(variants.map((v) => v.id));
+    expect(KIND_TIER[pickVariant(variants, 4)!.kind]).toBe(4);
+    expect(KIND_TIER[pickVariant(variants, 1)!.kind]).toBe(1);
+    const gappy = variants.filter((v) => KIND_TIER[v.kind] === 1 || KIND_TIER[v.kind] === 3);
+    expect(KIND_TIER[pickVariant(gappy, 2)!.kind]).toBe(1);
+    expect(pickVariant([], 2)).toBeUndefined();
+  });
+});
+
+describe("EN→DE meaning check", () => {
+  it("shows an example sentence and accepts any listed German translation", () => {
+    const e = entry({ translationDe: "verschärfen, verschlimmern (Problem)" });
+    const ex = generateExercise("meaning_en_de", e, pool, "s")!;
+    expect(ex.prompt).toBe("The drought exacerbated the food crisis.");
+    expect(ex.context).toContain("exacerbated");
+    expect(ex.answer.type).toBe("typed");
+    if (ex.answer.type !== "typed") return;
+    expect(checkAnswer("verschärfen", ex.answer.spec).kind).toBe("exact");
+    expect(checkAnswer("Verschlimmern", ex.answer.spec).kind).toBe("exact");
+    expect(checkAnswer("verschlimern", ex.answer.spec).kind).toBe("typo");
+    expect(checkAnswer("verbessern", ex.answer.spec).kind).toBe("wrong");
+  });
+  it("splits translations and needs a German meaning plus an example", () => {
+    expect(germanMeaningAnswers("abmildern; lindern / mildern oder dämpfen")).toEqual(["abmildern", "lindern", "mildern", "dämpfen"]);
+    expect(germanMeaningAnswers("(etw.) verschärfen")).toEqual(["(etw.) verschärfen", "verschärfen"]);
+    expect(generateExercise("meaning_en_de", pool[1], pool, "s")).toBeNull();
+    expect(generateExercise("meaning_en_de", entry({ translationDe: null }), pool, "s")).toBeNull();
+    expect(evidenceFor({ kind: "meaning_en_de", dimension: "meaning" }, 1)).toEqual({ meaning: 1, recognition: 1 });
+  });
+});
+
+describe("exam-date weighting", () => {
+  const base = (id: string, over: Partial<QueueState> = {}): QueueState => ({
+    entryId: id, due: new Date(T0.getTime() + 30 * day), state: State.Review, reps: 5, lapses: 0, stability: 30,
+    lastReview: new Date(T0.getTime() - 6 * day), mastery: { production: { score: 0.9, n: 3 }, collocation: { score: 0.9, n: 3 }, writing: { score: 1, n: 1 } },
+    markedDifficult: false, topicIds: ["other"], introduced: true, ...over,
+  });
+  const opts = { now: T0, endOfDay: new Date(T0.getTime() + 12 * 3600000), minutes: 10, newLimitRemaining: 0, reviewLimitRemaining: 100, mode: "mixed" as const };
+
+  it("is active only within 8 weeks before the exam", () => {
+    expect(examPrepActive("2026-03-10", T0)).toBe(true);
+    expect(examPrepActive("2026-05-05", T0)).toBe(true); // 56 days
+    expect(examPrepActive("2026-05-06", T0)).toBe(false);
+    expect(examPrepActive("2026-03-09", T0)).toBe(false);
+    expect(examPrepActive(null, T0)).toBe(false);
+    expect(examPrepActive("soon", T0)).toBe(false);
+  });
+
+  it("gives exam-relevant words most of a larger extra-practice share, weakest production/collocation first", () => {
+    const states = [
+      ...Array.from({ length: 10 }, (_, i) => base(`weak${i}`, { markedDifficult: true })),
+      base("examStrong", { topicIds: ["exam"] }),
+      base("examWeakCol", { topicIds: ["exam"], mastery: { production: { score: 0.9, n: 3 }, collocation: { score: 0.1, n: 3 } } }),
+      base("examWeakProd", { topicIds: ["exam"], mastery: { production: { score: 0.3, n: 3 }, collocation: { score: 0.8, n: 3 } } }),
+    ];
+    const without = buildQueue(states, opts).items;
+    expect(without).toHaveLength(Math.ceil(30 * 0.25));
+    expect(without.some((i) => i.entryId === "examStrong")).toBe(false); // not weak: no extra practice without an exam
+
+    // focused mode keeps the selection order (no interleaving), so the ranking is visible
+    const withExam = buildQueue(states, { ...opts, mode: "focused", examFocus: { topicIds: ["exam"] } }).items;
+    expect(withExam).toHaveLength(Math.ceil(30 * 0.4));
+    expect(withExam.slice(0, 3).map((i) => i.entryId)).toEqual(["examWeakCol", "examWeakProd", "examStrong"]);
+    expect(withExam.find((i) => i.entryId === "examStrong")?.reason).toBe("exam_prep");
+    expect(withExam.find((i) => i.entryId === "examWeakCol")?.reason).toBe("weak_collocation");
+    expect(withExam.filter((i) => i.entryId.startsWith("weak"))).toHaveLength(9);
+    expect(new Set(withExam.map((i) => i.entryId)).size).toBe(withExam.length);
+    expect(withExam.every((i) => !i.schedule)).toBe(true);
+  });
+
+  it("leaves room for other weak words when there are many exam words", () => {
+    const states = [
+      ...Array.from({ length: 10 }, (_, i) => base(`weak${i}`, { markedDifficult: true })),
+      ...Array.from({ length: 20 }, (_, i) => base(`exam${i}`, { topicIds: ["exam"] })),
+    ];
+    const items = buildQueue(states, { ...opts, examFocus: { topicIds: ["exam"] } }).items;
+    expect(items.filter((i) => i.entryId.startsWith("exam"))).toHaveLength(Math.ceil(12 * (2 / 3)));
+    expect(items.filter((i) => i.entryId.startsWith("weak"))).toHaveLength(4);
+  });
+
+  it("treats every word as exam-relevant when no exam topics are known, and never touches review-only mode", () => {
+    const states = [base("a"), base("b", { topicIds: [] })];
+    expect(buildQueue(states, { ...opts, examFocus: { topicIds: null } }).items.map((i) => i.entryId).sort()).toEqual(["a", "b"]);
+    expect(buildQueue(states, { ...opts, mode: "review", examFocus: { topicIds: null } }).items).toEqual([]);
   });
 });

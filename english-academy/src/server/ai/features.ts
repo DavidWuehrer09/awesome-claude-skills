@@ -207,6 +207,22 @@ export const challengeOutput = z.object({
 });
 export type ChallengeInput = { text: string; annotation: { excerpt: string; explanation: string; suggestion: string; category: string }; argument: string; mode: "challenge" | "clarify" };
 
+// ---------------------------------------------------------------- typed-answer semantic check
+
+export const answerCheckOutput = z.object({
+  acceptable: z.boolean(),
+  explanation: z.string(),
+});
+export type AnswerCheckInput = {
+  exercise: string;
+  prompt: string;
+  context: string | null;
+  targetWord: string;
+  expected: string[];
+  learnerAnswer: string;
+  answerLanguage: "en" | "de";
+};
+
 // ---------------------------------------------------------------- feature registry
 
 export type Feature<I, O extends z.ZodType> = {
@@ -364,6 +380,20 @@ Task: the learner challenges or asks about a feedback comment on their writing. 
   } satisfies Feature<ChallengeInput, typeof challengeOutput>,
 
   ...examinerFeatures,
+
+  // ------------------------------------------------ typed-answer semantic check (learning engine)
+  // Asked only after the deterministic check said "wrong"; the client shows the result as AI judgement.
+  answerCheck: {
+    id: "answerCheck", version: "answerCheck@1", fast: true, schema: answerCheckOutput, effort: "low", maxTokens: 600,
+    system: `${TEACHING_PRINCIPLES}
+Task: a vocabulary exercise expected a specific word, and the learner typed something else. Decide whether the learner's answer is ALSO acceptable for this exact exercise: a genuine synonym or translation with the same meaning that fits the context, register and grammar of the prompt. Spelling slips of a valid answer are fine. Be strict: a related but different meaning, a wrong word class, or a word that does not fit the sentence is not acceptable. "explanation": one or two short sentences for the learner (in English), saying why it fits or what the difference is.`,
+    user: (i: AnswerCheckInput) => `Exercise: ${i.exercise}\nPrompt: ${i.prompt}\n${i.context ? `Context: ${i.context}\n` : ""}Answer language: ${i.answerLanguage === "de" ? "German" : "English"}\nExpected answer(s): ${json(i.expected)}\nTarget word: ${i.targetWord}\nLearner answer: """${i.learnerAnswer}"""`,
+    check: (_i: AnswerCheckInput, o) => (o.explanation.trim() ? [] : ["explanation is empty"]),
+    // No fake judgement in demo mode: the deterministic verdict stays.
+    demo: () => {
+      throw new Error("demo_unsupported");
+    },
+  } satisfies Feature<AnswerCheckInput, typeof answerCheckOutput>,
 } as const;
 
 export type FeatureId = keyof typeof features;

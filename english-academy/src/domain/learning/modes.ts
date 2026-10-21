@@ -20,8 +20,17 @@ export const PRACTICE_MODES: PracticeMode[] = [
   { slug: "translation", title: "Translation Practice", description: "Translate natural German sentences; more than one good answer is accepted.", ai: "translation" },
   { slug: "error-correction", title: "Error Correction", description: "Find and fix vocabulary, collocation, register or grammar errors.", ai: "error_correction" },
   { slug: "context-choice", title: "Contextual Word Choice", description: "Which word best expresses the intended meaning in this paragraph?", ai: "context_choice" },
-  { slug: "mixed", title: "Mixed Challenge", description: "All types combined; the mix adapts to how you perform.", href: "/learn/session?mode=practice" },
+  { slug: "mixed", title: "Mixed Challenge", description: "All types combined and adaptive: two right in a row make the next exercise harder, a mistake makes it easier.", href: "/learn/session?mode=practice&adaptive=1" },
   { slug: "sprint", title: "Vocabulary Sprint", description: "60 seconds of quick retrieval. Just for fun: it doesn't change your schedule.", href: "/learn/session?mode=practice&kinds=meaning_choice,typed_de_en&timer=60&schedule=0&minutes=5" },
   { slug: "mastery-check", title: "Mastery Check", description: "Test one topic in every dimension and see what is genuinely secure.", href: "/learn" },
   { slug: "writing-transfer", title: "Writing Transfer", description: "Use selected words naturally in a paragraph, with feedback.", href: "/writing/new?section=vocab_context" },
+  { slug: "en-de-meaning", title: "EN→DE meaning", description: "Read one of your example sentences and type what the word means in German.", href: "/learn/session?mode=practice&kinds=meaning_en_de" },
 ];
+
+/** Deterministic modes run as a learn session and can be narrowed to one topic. */
+export function sessionModeHref(m: PracticeMode, topicId: string | null): string | undefined {
+  if (!m.href) return undefined;
+  if (m.slug === "mastery-check") return topicId ? `/learn/session?check=1&topic=${topicId}` : m.href;
+  if (!topicId || !m.href.startsWith("/learn/session")) return m.href;
+  return `${m.href}&topic=${topicId}`;
+}
