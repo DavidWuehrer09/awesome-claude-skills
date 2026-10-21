@@ -85,6 +85,11 @@ export const userSettings = pgTable("user_settings", {
   theme: text("theme").notNull().default("system"),
   reducedMotion: boolean("reduced_motion").notNull().default(false),
   showStreak: boolean("show_streak").notNull().default(true),
+  // Study planning
+  targetTopicIds: jsonb("target_topic_ids").$type<string[]>().notNull().default([]),
+  studyIntensity: text("study_intensity").notNull().default("normal"), // light | normal | intensive
+  preferredStudyTime: text("preferred_study_time"), // HH:MM local, optional
+  weeklySummaryEmail: boolean("weekly_summary_email").notNull().default(false),
   onboarded: boolean("onboarded").notNull().default(false),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
@@ -528,7 +533,7 @@ export const reminderDeliveries = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    channel: text("channel").notNull(), // push | email
+    channel: text("channel").notNull(), // push | email | weekly (weekly summary e-mail)
     localDate: text("local_date").notNull(), // YYYY-MM-DD in the user's timezone
     status: text("status").notNull(), // claimed | sent | failed | skipped
     attempts: integer("attempts").notNull().default(0),

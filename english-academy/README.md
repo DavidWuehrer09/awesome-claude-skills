@@ -5,6 +5,7 @@ A web app for German Gymnasium students who want to master C1/C2 vocabulary and 
 - **Deploying:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - **Costs** (development vs. hosting, database, email and AI, each listed separately): [docs/COSTS.md](docs/COSTS.md)
 - **How the learning engine decides what to study:** [docs/LEARNING-ENGINE.md](docs/LEARNING-ENGINE.md)
+- **Offline use, file storage and OCR, AI access, known limitations:** [docs/FEATURES-AND-LIMITATIONS.md](docs/FEATURES-AND-LIMITATIONS.md)
 
 ## What it does
 

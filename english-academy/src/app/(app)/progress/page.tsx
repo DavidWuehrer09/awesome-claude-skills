@@ -7,6 +7,7 @@ import { LEVEL_LABEL, type MasteryLevel } from "@/domain/learning/mastery";
 import { DIMENSION_LABEL } from "@/domain/writing/rubrics";
 import { requireUser } from "@/server/auth";
 import { progressReport } from "@/server/repos/progress";
+import { Trends } from "./trends";
 
 export const metadata = { title: "Progress" };
 export const dynamic = "force-dynamic";
@@ -130,6 +131,7 @@ export default async function ProgressPage() {
           ) : <p className="mt-2 text-sm text-ink-3">Appears after AI-assessed writing.</p>}
         </Card>
       </div>
+      <Trends />
     </>
   );
 }

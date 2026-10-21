@@ -15,6 +15,13 @@
       "when": 1792523141805,
       "tag": "0001_usage_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792565028528,
+      "tag": "0002_study_planning",
+      "breakpoints": true
     }
   ]
 }

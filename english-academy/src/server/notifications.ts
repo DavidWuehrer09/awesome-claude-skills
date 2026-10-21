@@ -6,6 +6,7 @@ import type { Db } from "@/db/client";
 import { pushSubscriptions, reminderDeliveries, userSettings, users } from "@/db/schema";
 import { inWindow, localDateString, localMinutesOfDay, localWeekday, parseHHMM } from "@/lib/time";
 import { log } from "./log";
+import { weeklySummary } from "./repos/planning";
 import { dashboardCounts } from "./repos/progress";
 
 export function pushConfigured() {
@@ -43,7 +44,7 @@ export function verifyUnsubscribe(userId: string, token: string) {
   }
 }
 
-export type ReminderOutcome = { userId: string; channel: "push" | "email"; status: string };
+export type ReminderOutcome = { userId: string; channel: "push" | "email" | "weekly"; status: string };
 
 /**
  * Decide whether a reminder is due for this user now. Pure apart from the
@@ -59,7 +60,7 @@ export function reminderDue(now: Date, s: { timezone: string; reminderTime: stri
 }
 
 /** Claim (user, channel, local date) exactly once; retries of the job cannot double-send. */
-async function claim(db: Db, userId: string, channel: "push" | "email", localDate: string) {
+async function claim(db: Db, userId: string, channel: "push" | "email" | "weekly", localDate: string) {
   const rows = await db.insert(reminderDeliveries).values({ userId, channel, localDate, status: "claimed", attempts: 1 })
     .onConflictDoNothing().returning();
   if (rows[0]) return rows[0];
@@ -114,6 +115,28 @@ export async function runReminderJob(db: Db, now = new Date(), baseUrl = process
     .where(and(eq(userSettings.onboarded, true)));
   const out: ReminderOutcome[] = [];
   for (const { s, email } of rows) {
+    // Weekly summary e-mail: Sundays after the reminder time, once per week (own opt-in).
+    if (s.weeklySummaryEmail && emailConfigured() && localWeekday(now, s.timezone) === 0 && localMinutesOfDay(now, s.timezone) >= parseHHMM(s.reminderTime)) {
+      const c = await claim(db, s.userId, "weekly", localDateString(now, s.timezone));
+      if (c) {
+        const w = await weeklySummary(db, s.userId, now);
+        const unsub = `${baseUrl}/api/email/unsubscribe?u=${s.userId}&t=${unsubscribeToken(s.userId)}`;
+        const lines = [
+          `This week: ${w.reviews} answers on ${w.studyDays} day${w.studyDays === 1 ? "" : "s"} (${w.minutes} min)${w.accuracy !== null ? `, ${w.accuracy}% correct` : ""}.`,
+          `${w.newWords} new word${w.newWords === 1 ? "" : "s"}, ${w.writingSubmissions} writing submission${w.writingSubmissions === 1 ? "" : "s"}, ${w.examsSubmitted} practice exam${w.examsSubmitted === 1 ? "" : "s"}.`,
+          ...(w.hardestWords.length ? [`Words to look at again: ${w.hardestWords.map((h) => h.headword).join(", ")}.`] : []),
+        ];
+        try {
+          await sendEmail(email, "Your week in English Academy", `${lines.join("\n")}\n\nOpen: ${baseUrl}/progress\n\nUnsubscribe: ${unsub}`,
+            `${lines.map((l) => `<p>${l.replace(/[<>&]/g, "")}</p>`).join("")}<p><a href="${baseUrl}/progress">See your progress</a></p><p style="color:#666;font-size:12px"><a href="${unsub}">Unsubscribe from e-mails</a></p>`, unsub);
+          await finish(db, c.id, "sent");
+          out.push({ userId: s.userId, channel: "weekly", status: "sent" });
+        } catch (e) {
+          await finish(db, c.id, "failed", e instanceof Error ? e.message : "error");
+          out.push({ userId: s.userId, channel: "weekly", status: "failed" });
+        }
+      }
+    }
     if (!s.pushEnabled && !s.emailEnabled) continue;
     if (!reminderDue(now, s)) continue;
     const counts = await dashboardCounts(db, s.userId, now);

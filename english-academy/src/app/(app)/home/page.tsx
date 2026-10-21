@@ -1,9 +1,10 @@
-import { CalendarClock, Flame, PenLine } from "lucide-react";
+import { CalendarClock, Flame, PenLine, Target } from "lucide-react";
 import Link from "next/link";
 import { Card, LinkButton, PageHeader } from "@/components/ui";
 import { getDb } from "@/db/client";
 import { daysUntil } from "@/lib/time";
 import { requireUser } from "@/server/auth";
+import { weeklyPlan } from "@/server/repos/planning";
 import { dashboardCounts, progressReport, recommendations } from "@/server/repos/progress";
 import { recentSubmissions } from "@/server/repos/writing";
 import { Recommendations } from "./recommendations";
@@ -15,11 +16,12 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const user = await requireUser();
   const db = await getDb();
-  const [counts, recs, report, writing] = await Promise.all([
+  const [counts, recs, report, writing, plan] = await Promise.all([
     dashboardCounts(db, user.id),
     recommendations(db, user.id),
     progressReport(db, user.id),
     recentSubmissions(db, user.id, 3),
+    weeklyPlan(db, user.id),
   ]);
   const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: counts.settings.timezone }).format(new Date()));
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -62,6 +64,7 @@ export default async function Home() {
             })}
           </div>
           <div className="mt-4 space-y-2 text-sm text-ink-2">
+            <p>Study days this week: <strong className="text-ink">{plan.studyDays} of {plan.targetDays}</strong> <span className="text-ink-3">({plan.intensity} plan)</span></p>
             {report.streak !== null && report.streak > 0 && <p className="flex items-center gap-2"><Flame className="size-4 text-accent" aria-hidden /> {report.streak}-day study streak</p>}
             {examDays !== null && examDays >= 0 && <p className="flex items-center gap-2"><CalendarClock className="size-4 text-navy" aria-hidden /> Exam in {examDays} days</p>}
             {report.observed.independentAccuracy28d !== null && <p>Independent recall (28 days): <strong>{report.observed.independentAccuracy28d}%</strong></p>}
@@ -75,6 +78,23 @@ export default async function Home() {
           <Recommendations initial={recs} />
         </Card>
         <div className="space-y-4">
+          {(plan.targets.length > 0 || (examDays !== null && examDays >= 0)) && (
+            <Card>
+              <h2 className="flex items-center gap-2 text-lg"><Target className="size-4" aria-hidden /> Upcoming goals</h2>
+              <ul className="mt-3 space-y-3 text-sm">
+                {examDays !== null && examDays >= 0 && <li>Exam in <strong>{examDays} days</strong>{plan.targets.length ? ": focus on your target topics." : ". Set target topics in Settings to focus your practice."}</li>}
+                {plan.targets.map((t) => (
+                  <li key={t.id}>
+                    <Link href={`/learn/session?mode=focused&topic=${t.id}`} className="block hover:text-navy">
+                      <span className="flex justify-between gap-2"><span className="truncate">{t.name}</span><span className="shrink-0 text-ink-3">{t.productive}/{t.words} active</span></span>
+                      <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-2"><span className="block h-full bg-sage" style={{ width: `${t.words ? (t.productive / t.words) * 100 : 0}%` }} /></span>
+                      {(t.due > 0 || t.notStarted > 0) && <span className="mt-0.5 block text-xs text-ink-3">{t.due ? `${t.due} due` : ""}{t.due && t.notStarted ? " · " : ""}{t.notStarted ? `${t.notStarted} not started` : ""}</span>}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card>
             <h2 className="text-lg">Weakest areas</h2>
             {weakestTopics.length ? (

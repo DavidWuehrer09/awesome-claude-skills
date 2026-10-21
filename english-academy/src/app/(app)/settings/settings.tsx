@@ -10,6 +10,7 @@ type SettingsT = {
   timezone: string; targetLevel: string; mainGoal: string | null; examDate: string | null; sessionMinutes: number; dailyNewLimit: number; dailyReviewLimit: number;
   requestRetention: number; typoTolerance: string; reminderTime: string; reminderDays: number[]; quietStart: string; quietEnd: string; pushEnabled: boolean;
   pushPromptDeclined: boolean; emailEnabled: boolean; aiEnabled: boolean; aiProfileConsent: boolean; theme: string; reducedMotion: boolean; showStreak: boolean;
+  targetTopicIds: string[]; studyIntensity: "light" | "normal" | "intensive"; preferredStudyTime: string | null; weeklySummaryEmail: boolean;
 };
 type Me = {
   user: { email: string; displayName: string | null };
@@ -38,6 +39,12 @@ export function Settings() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [timezones, setTimezones] = useState<string[]>([]);
+  const [topicList, setTopicList] = useState<{ id: string; name: string; parentId: string | null }[]>([]);
+  useEffect(() => {
+    type Node = { id: string; name: string; parentId: string | null; children: Node[] };
+    const flatten = (nodes: Node[]): Node[] => nodes.flatMap((n) => [n, ...flatten(n.children)]);
+    void api<{ topics: Node[] }>("/api/topics").then((r) => setTopicList(flatten(r.topics))).catch(() => {});
+  }, []);
 
   const load = useCallback(() => api<Me>("/api/me").then((r) => {
     setMe(r);
@@ -139,6 +146,40 @@ export function Settings() {
           </div>
           <Field label="Main goal" htmlFor="mg"><Input id="mg" value={s.mainGoal ?? ""} onChange={(e) => update("mainGoal", e.target.value)} /></Field>
           <Button variant="primary" onClick={() => save({ sessionMinutes: s.sessionMinutes, targetLevel: s.targetLevel, dailyNewLimit: s.dailyNewLimit, dailyReviewLimit: s.dailyReviewLimit, requestRetention: s.requestRetention, typoTolerance: s.typoTolerance, examDate: s.examDate, timezone: s.timezone, mainGoal: s.mainGoal })} loading={saving}>Save study settings</Button>
+        </Card>
+
+        <Card className="space-y-4">
+          <h2 id="planning" className="text-lg">Study plan</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Intensity" htmlFor="si" hint={{ light: "3 study days a week", normal: "5 study days a week", intensive: "6 study days a week" }[s.studyIntensity]}>
+              <Select id="si" value={s.studyIntensity} onChange={(e) => update("studyIntensity", e.target.value as SettingsT["studyIntensity"])}>
+                <option value="light">Light</option><option value="normal">Normal</option><option value="intensive">Intensive</option>
+              </Select>
+            </Field>
+            <Field label="Preferred study time" htmlFor="pst" hint="Used for your weekly plan; reminders have their own time below.">
+              <Input id="pst" type="time" value={s.preferredStudyTime ?? ""} onChange={(e) => update("preferredStudyTime", e.target.value || null)} />
+            </Field>
+          </div>
+          <fieldset>
+            <legend className="text-sm font-medium">Target topics</legend>
+            <p className="text-xs text-ink-3">Shown as goals on Home and preferred in extra practice, especially as the exam gets close.</p>
+            {topicList.length === 0 ? <p className="mt-1 text-sm text-ink-3">No topics yet.</p> : (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {topicList.map((t) => {
+                  const on = s.targetTopicIds.includes(t.id);
+                  return (
+                    <button key={t.id} type="button" aria-pressed={on} onClick={() => update("targetTopicIds", on ? s.targetTopicIds.filter((x) => x !== t.id) : [...s.targetTopicIds, t.id])}
+                      className={on ? "rounded-full border border-navy bg-navy/10 px-3 py-1 text-sm text-navy" : "rounded-full border border-line-strong px-3 py-1 text-sm text-ink-2"}>
+                      {t.parentId ? "↳ " : ""}{t.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </fieldset>
+          <Toggle checked={s.weeklySummaryEmail} disabled={!me.email.configured} onChange={(v) => update("weeklySummaryEmail", v)} label="Weekly summary by e-mail"
+            description={me.email.configured ? "Sundays, after your reminder time." : "E-mail is not configured on this server. The summary is always on the Progress page."} />
+          <Button variant="primary" loading={saving} onClick={() => save({ studyIntensity: s.studyIntensity, preferredStudyTime: s.preferredStudyTime, targetTopicIds: s.targetTopicIds, weeklySummaryEmail: s.weeklySummaryEmail })}>Save study plan</Button>
         </Card>
 
         <Card className="space-y-4" >

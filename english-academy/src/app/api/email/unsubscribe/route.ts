@@ -10,7 +10,7 @@ async function handle(req: NextRequest) {
   if (!/^[0-9a-f-]{36}$/.test(u) || !verifyUnsubscribe(u, t)) {
     return new NextResponse("This unsubscribe link is invalid.", { status: 400 });
   }
-  await (await getDb()).update(userSettings).set({ emailEnabled: false }).where(eq(userSettings.userId, u));
+  await (await getDb()).update(userSettings).set({ emailEnabled: false, weeklySummaryEmail: false }).where(eq(userSettings.userId, u));
   return new NextResponse("You will no longer receive reminder emails. You can re-enable them in Settings.", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }
 
