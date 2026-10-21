@@ -55,24 +55,32 @@ export function rubricNote(taskType: string): string {
   return NOTES[(taskType as TaskType)] ?? NOTES.free;
 }
 
-/** Normalise free-text error categories into a stable curriculum set. */
-export const CURRICULUM: Record<string, { label: string; practice: string }> = {
-  articles: { label: "Articles", practice: "Focused article exercises: zero vs. definite article with abstract and plural nouns." },
-  verb_patterns: { label: "Verb patterns", practice: "Verb + -ing / to-infinitive / that-clause patterns in context." },
-  prepositions: { label: "Prepositions", practice: "Contextual preposition gaps with dependent prepositions (e.g. 'responsible for', 'in contrast to')." },
-  tenses: { label: "Tenses and aspect", practice: "Tense consistency in analysis (present) vs. narrative reference." },
-  agreement: { label: "Agreement", practice: "Subject-verb agreement with long subjects and collective nouns." },
-  collocations: { label: "Collocations", practice: "Collocation trainer for your current topic." },
-  word_choice: { label: "Word choice and precision", practice: "Replace vague verbs (show, make, do) with precise ones." },
-  register: { label: "Register", practice: "Rewrite informal sentences in a formal register." },
-  sentence_structure: { label: "Sentence structure", practice: "Sentence combination and variation tasks." },
-  concision: { label: "Concision", practice: "Editing challenges: cut 30% without losing content." },
-  argumentation: { label: "Argumentation", practice: "Claim → reason → evidence → counterargument exercises." },
-  analysis: { label: "Analysis", practice: "Evidence-to-interpretation: technique → quote → effect → intention." },
-  cohesion: { label: "Cohesion and transitions", practice: "Linking paragraphs with precise connectors." },
-  spelling: { label: "Spelling", practice: "Typed recall of words you misspell." },
-  punctuation: { label: "Punctuation", practice: "Commas with relative clauses and introductory phrases." },
+/**
+ * Normalise free-text error categories into a stable curriculum set. "drill" is
+ * the closest My English Examiner skill, for targeted drills (/abitur/examiner/drills?skill=…).
+ */
+export const CURRICULUM: Record<string, { label: string; practice: string; drill: string }> = {
+  articles: { label: "Articles", practice: "Focused article exercises: zero vs. definite article with abstract and plural nouns.", drill: "grammar_errors" },
+  verb_patterns: { label: "Verb patterns", practice: "Verb + -ing / to-infinitive / that-clause patterns in context.", drill: "grammar_errors" },
+  prepositions: { label: "Prepositions", practice: "Contextual preposition gaps with dependent prepositions (e.g. 'responsible for', 'in contrast to').", drill: "grammar_errors" },
+  tenses: { label: "Tenses and aspect", practice: "Tense consistency in analysis (present) vs. narrative reference.", drill: "grammar_errors" },
+  agreement: { label: "Agreement", practice: "Subject-verb agreement with long subjects and collective nouns.", drill: "grammar_errors" },
+  collocations: { label: "Collocations", practice: "Collocation trainer for your current topic.", drill: "awkward_collocations" },
+  word_choice: { label: "Word choice and precision", practice: "Replace vague verbs (show, make, do) with precise ones.", drill: "imprecise_vocabulary" },
+  register: { label: "Register", practice: "Rewrite informal sentences in a formal register.", drill: "register_slips" },
+  sentence_structure: { label: "Sentence structure", practice: "Sentence combination and variation tasks.", drill: "excessive_complexity" },
+  concision: { label: "Concision", practice: "Editing challenges: cut 30% without losing content.", drill: "excessive_complexity" },
+  argumentation: { label: "Argumentation", practice: "Claim → reason → evidence → counterargument exercises.", drill: "underdeveloped_counterarguments" },
+  analysis: { label: "Analysis", practice: "Evidence-to-interpretation: technique → quote → effect → intention.", drill: "insufficient_textual_evidence" },
+  cohesion: { label: "Cohesion and transitions", practice: "Linking paragraphs with precise connectors.", drill: "weak_transitions" },
+  spelling: { label: "Spelling", practice: "Typed recall of words you misspell.", drill: "spelling_punctuation" },
+  punctuation: { label: "Punctuation", practice: "Commas with relative clauses and introductory phrases.", drill: "spelling_punctuation" },
 };
+
+/** Targeted drills for a writing error category (closest examiner skill). */
+export function drillHref(category: string): string {
+  return `/abitur/examiner/drills?skill=${CURRICULUM[category]?.drill ?? "grammar_errors"}`;
+}
 
 export function normalizeCategory(raw: string): string {
   const s = raw.toLowerCase();

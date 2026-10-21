@@ -15,7 +15,7 @@ import {
 } from "@/db/schema";
 import { masteryLevel, overallMastery, type MasteryLevel } from "@/domain/learning/mastery";
 import { makeScheduler, retrievability } from "@/domain/learning/scheduler";
-import { CURRICULUM } from "@/domain/writing/rubrics";
+import { CURRICULUM, drillHref } from "@/domain/writing/rubrics";
 import { endOfLocalDay, localDateString, startOfLocalDay } from "@/lib/time";
 import { getSettings } from "./learning";
 
@@ -147,7 +147,7 @@ export async function progressReport(db: Db, userId: string, now = new Date()) {
     daily: [...daily.entries()].map(([date, v]) => ({ date, ...v })),
     byTopic,
     writingTrend,
-    patterns: patterns.map((p) => ({ ...p, label: CURRICULUM[p.category]?.label ?? p.category, practice: CURRICULUM[p.category]?.practice ?? "" })),
+    patterns: patterns.map((p) => ({ ...p, label: CURRICULUM[p.category]?.label ?? p.category, practice: CURRICULUM[p.category]?.practice ?? "", drillHref: drillHref(p.category) })),
     streak: settings.showStreak ? await streak(db, userId, settings.timezone, now) : null,
     explanations: {
       accuracy28d: "Share of answers in the last 28 days that were correct, a valid alternative, or correct apart from a small spelling slip.",

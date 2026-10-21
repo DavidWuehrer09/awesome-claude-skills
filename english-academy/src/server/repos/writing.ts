@@ -28,6 +28,8 @@ export const promptCreateSchema = z.discriminatedUnion("origin", [
     topic: z.string().trim().min(2).max(120),
     difficulty: z.enum(["B2", "C1", "C2"]).default("C1"),
     minutes: z.number().int().min(5).max(300).nullish(),
+    /** Desired length in words; the stored word range is ±10% of it. */
+    targetLength: z.number().int().min(20).max(1500).nullish(),
     targetEntryIds: z.array(z.string().uuid()).max(12).optional(),
   }),
   z.object({
@@ -86,11 +88,16 @@ export async function createPrompt(db: Db, userId: string, input: z.input<typeof
   }
   const { data: out, meta } = await runFeature(db, userId, "writingPrompt", {
     section: data.section, taskType: data.taskType, topic: data.topic, difficulty: data.difficulty, targetWords: targets.words, minutes: data.minutes ?? null,
+    targetLength: data.targetLength ?? null,
   });
+  // The learner's chosen length wins over whatever range the model proposed.
+  const range = data.targetLength
+    ? { minWords: Math.round(data.targetLength * 0.9), maxWords: Math.round(data.targetLength * 1.1) }
+    : { minWords: out.minWords, maxWords: out.maxWords };
   const [row] = await db.insert(writingPrompts).values({
     userId, section: data.section, taskType: data.taskType, title: out.title, instructions: out.instructions, sourceText: out.sourceText,
     sourceLabel: out.sourceText ? (out.sourceLabel ?? "Original text written for this exercise (fictional)") : null,
-    minWords: out.minWords, maxWords: out.maxWords, timeLimitMinutes: data.minutes ?? null, difficulty: data.difficulty,
+    ...range, timeLimitMinutes: data.minutes ?? null, difficulty: data.difficulty,
     origin: "ai", isDemo: meta.demo, targetEntryIds: targets.ids, targetWords: targets.words,
   }).returning();
   return row;
@@ -235,7 +242,7 @@ export async function assessSubmission(db: Db, userId: string, submissionId: str
       status: "complete", provider: meta.provider, model: meta.model, promptVersion: meta.promptVersion, isDemo: meta.demo,
       result: data as unknown as Record<string, unknown>, completedAt: new Date(),
     }).where(eq(writingAssessments.id, a.id)).returning();
-    if (!meta.demo) await applyAssessmentSideEffects(db, userId, data, prompt?.targetEntryIds ?? [], prompt?.targetWords ?? []);
+    if (!meta.demo) await applyAssessmentSideEffects(db, userId, data, prompt?.targetEntryIds ?? [], prompt?.targetWords ?? [], submission.body);
     return done;
   } catch (e) {
     const message = e instanceof AIError ? e.message : "The assessment failed. Your text is saved; try again.";
@@ -244,9 +251,45 @@ export async function assessSubmission(db: Db, userId: string, submissionId: str
   }
 }
 
-type AssessData = Awaited<ReturnType<typeof runFeature<"assess">>>["data"];
+export type AssessData = Awaited<ReturnType<typeof runFeature<"assess">>>["data"];
 
-async function applyAssessmentSideEffects(db: Db, userId: string, data: AssessData, targetIds: string[], targetWords: string[]) {
+export type OwnWordStatus = "correct" | "unnatural" | "incorrect" | "used";
+/** Writing/production evidence per judgement; "used" (present, not commented on) is a modest credit. */
+const WRITING_SCORE: Record<OwnWordStatus, number> = { correct: 1, unnatural: 0.5, incorrect: 0.1, used: 0.6 };
+const WORD_CATEGORIES = new Set(["vocabulary", "collocation", "register", "spelling"]);
+
+/**
+ * How the assessment judged each of the learner's own words found in the text:
+ * an explicit target-word verdict first, then a short word-level comment quoting
+ * the word (error → incorrect, suggestion → unnatural), otherwise just "used".
+ * Long excerpts are ignored: a comment on a whole sentence is not about one word.
+ */
+export function judgeOwnVocabulary(data: AssessData, words: { id: string; headword: string }[]): Map<string, OwnWordStatus> {
+  const out = new Map<string, OwnWordStatus>();
+  const short = (excerpt: string) => wordCount(excerpt) <= 8;
+  for (const w of words) {
+    const re = inflectionPattern(w.headword);
+    const verdict = data.vocabulary.targetUse.find((t) => normalizeHeadword(t.word) === normalizeHeadword(w.headword));
+    if (verdict && (verdict.status === "correct" || verdict.status === "unnatural" || verdict.status === "incorrect")) {
+      out.set(w.id, verdict.status);
+      continue;
+    }
+    const comments = data.annotations.filter((a) => WORD_CATEGORIES.has(a.category) && short(a.excerpt) && !!re?.test(a.excerpt));
+    if (comments.some((a) => a.isError)) out.set(w.id, "incorrect");
+    else if (comments.length || data.vocabulary.simplerBetter.some((x) => short(x.excerpt) && !!re?.test(x.excerpt))) out.set(w.id, "unnatural");
+    else out.set(w.id, "used");
+  }
+  return out;
+}
+
+/** The learner's own vocabulary in a submission, with the assessment's judgement when there is a real one. */
+export async function ownVocabularyJudged(db: Db, userId: string, body: string, result: AssessData | null) {
+  const words = await vocabularyInText(db, userId, body);
+  const judged = result ? judgeOwnVocabulary(result, words) : null;
+  return words.map((w) => ({ ...w, status: judged?.get(w.id) ?? null }));
+}
+
+async function applyAssessmentSideEffects(db: Db, userId: string, data: AssessData, targetIds: string[], targetWords: string[], body: string) {
   const now = new Date();
   // Vocabulary-to-writing: credit correct use, record weak use. "not_needed" is neutral.
   const score = { correct: 1, unnatural: 0.5, incorrect: 0.1 } as Record<string, number>;
@@ -254,6 +297,9 @@ async function applyAssessmentSideEffects(db: Db, userId: string, data: AssessDa
     const idx = targetWords.findIndex((w) => normalizeHeadword(w) === normalizeHeadword(t.word));
     if (idx >= 0 && targetIds[idx] && score[t.status] !== undefined) await recordWritingUse(db, userId, targetIds[idx], score[t.status], now);
   }
+  // The learner's other own words in the text get evidence too (target words were credited above).
+  const own = (await vocabularyInText(db, userId, body)).filter((w) => !targetIds.includes(w.id));
+  for (const [entryId, status] of judgeOwnVocabulary(data, own)) await recordWritingUse(db, userId, entryId, WRITING_SCORE[status], now);
   // Error patterns with spaced revisiting.
   const counts = new Map<string, number>();
   for (const p of data.errorPatterns) counts.set(normalizeCategory(p.category), (counts.get(normalizeCategory(p.category)) ?? 0) + p.count);
@@ -292,7 +338,41 @@ export const feedbackSchema = z.object({
   annotationId: z.string().max(40),
   action: z.enum(["understood", "challenge", "clarify", "accepted", "rejected"]),
   message: z.string().trim().max(2000).optional(),
+  /** With "accepted": replace the quoted excerpt in the latest draft (draftVersion as in the draft PATCH). */
+  apply: z.object({ replacement: z.string().trim().min(1).max(2000), draftVersion: z.number().int().min(1) }).optional(),
 });
+
+export type AppliedSuggestion =
+  | { status: "applied"; draft: typeof writingDrafts.$inferSelect; message: string }
+  | { status: "not_found" | "ambiguous"; message: string };
+
+/**
+ * Apply an accepted suggestion to the submission's draft: the excerpt is replaced
+ * only if it occurs exactly once (otherwise nothing changes and the learner is told
+ * why). Optimistic concurrency as in saveDraft: a stale draftVersion gets 409.
+ */
+export async function applySuggestionToDraft(db: Db, userId: string, submissionId: string, excerpt: string, input: { replacement: string; draftVersion: number }): Promise<AppliedSuggestion> {
+  const [sub] = await db.select({ draftId: writingSubmissions.draftId }).from(writingSubmissions)
+    .where(and(eq(writingSubmissions.userId, userId), eq(writingSubmissions.id, submissionId)));
+  if (!sub) throw notFound("Submission not found");
+  const [cur] = await db.select().from(writingDrafts).where(and(eq(writingDrafts.userId, userId), eq(writingDrafts.id, sub.draftId)));
+  if (!cur) throw notFound("Draft not found");
+  if (cur.version !== input.draftVersion) throw conflict("The draft was changed since you opened this report. Reload and try again.", { server: cur });
+  const needle = excerpt.trim();
+  const occurrences = needle ? cur.body.split(needle).length - 1 : 0;
+  if (occurrences === 0) {
+    return { status: "not_found", message: "The quoted passage is no longer in your draft (perhaps you have already revised it), so the draft was not changed." };
+  }
+  if (occurrences > 1) {
+    return { status: "ambiguous", message: `The quoted passage occurs ${occurrences} times in your draft, so it was not changed automatically. Edit the right place in the draft yourself.` };
+  }
+  const i = cur.body.indexOf(needle);
+  const [row] = await db.update(writingDrafts).set({
+    body: cur.body.slice(0, i) + input.replacement + cur.body.slice(i + needle.length), version: cur.version + 1, updatedAt: new Date(),
+  }).where(and(eq(writingDrafts.id, cur.id), eq(writingDrafts.version, cur.version))).returning();
+  if (!row) throw conflict("This draft was changed on another device", { server: cur });
+  return { status: "applied", draft: row, message: "Applied to your draft. Submit a new version when you have finished revising." };
+}
 
 export async function respondToFeedback(db: Db, userId: string, assessmentId: string, input: z.input<typeof feedbackSchema>) {
   const data = feedbackSchema.parse(input);
@@ -300,6 +380,8 @@ export async function respondToFeedback(db: Db, userId: string, assessmentId: st
   if (!a || !a.result) throw notFound("Assessment not found");
   const ann = (a.result.annotations as { id: string; excerpt: string; explanation: string; suggestion: string; category: string }[]).find((x) => x.id === data.annotationId);
   if (!ann) throw notFound("Comment not found");
+  // Applied first: a version conflict records nothing, so the learner can reload and retry.
+  const applied = data.action === "accepted" && data.apply ? await applySuggestionToDraft(db, userId, a.submissionId, ann.excerpt, data.apply) : null;
   let reply: Record<string, unknown> | null = null;
   if (data.action === "challenge" || data.action === "clarify") {
     if (data.action === "challenge" && !data.message) throw badRequest("Explain why you disagree");
@@ -312,7 +394,7 @@ export async function respondToFeedback(db: Db, userId: string, assessmentId: st
   const [row] = await db.insert(feedbackResponses).values({
     userId, assessmentId, annotationId: data.annotationId, action: data.action, message: data.message ?? null, reply,
   }).returning();
-  return row;
+  return { response: row, applied };
 }
 
 export async function errorPatterns(db: Db, userId: string) {
