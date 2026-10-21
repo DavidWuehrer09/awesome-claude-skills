@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flattenTopics, TopicSelect, type TopicNode } from "@/components/vocab/topic-select";
-import { Badge, Button, Card, Field, Input, Notice, PageHeader, Textarea, Toggle, useToast } from "@/components/ui";
+import { Badge, Button, Card, Field, Input, Meter, Notice, PageHeader, Textarea, Toggle, useToast } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
 import type { ImportCandidate } from "@/db/schema";
 
@@ -15,6 +15,12 @@ type Row = ImportCandidate & { topicPath: string; duplicateAction?: "skip" | "me
 type Source = "paste" | "file" | "image";
 
 const STEPS = ["Source", "Content", "Review", "Done"];
+/** Words enriched per click; sent to the server in small sequential chunks so progress stays visible. */
+const ENRICH_PER_CLICK = 20;
+const ENRICH_CHUNK = 5;
+
+type BatchResult = { enriched: string[]; unchanged: string[]; failed: { id: string; error: string }[]; remaining: string[]; stopped: { code: string; message: string } | null; demo: boolean };
+type EnrichState = { queue: string[]; total: number; done: number; enriched: number; unchanged: number; failed: number; running: boolean; stopped: string | null; demo: boolean };
 const EXAMPLE = `Politics and Democracy:
 to undermine — to weaken gradually
 compelling — convincing and persuasive
@@ -41,7 +47,38 @@ export function ImportWizard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ created: number; merged: number; skipped: number; createdIds: string[]; topicIds: string[] } | null>(null);
+  const [enrich, setEnrich] = useState<EnrichState | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  /** Enrich the next (up to) 20 new words, one small request after another; stops at the first quota error. */
+  const enrichNext = async () => {
+    const base = enrich ?? { queue: result?.createdIds ?? [], total: result?.createdIds.length ?? 0, done: 0, enriched: 0, unchanged: 0, failed: 0, running: false, stopped: null, demo: false };
+    let state: EnrichState = { ...base, running: true, stopped: null };
+    setEnrich(state);
+    const batch = state.queue.slice(0, ENRICH_PER_CLICK);
+    const rest = state.queue.slice(ENRICH_PER_CLICK);
+    for (let i = 0; i < batch.length; i += ENRICH_CHUNK) {
+      const chunk = batch.slice(i, i + ENRICH_CHUNK);
+      const later = batch.slice(i + ENRICH_CHUNK);
+      try {
+        const r = await api<BatchResult>("/api/vocab/enrich-batch", { method: "POST", json: { ids: chunk } });
+        const attempted = chunk.length - r.remaining.length;
+        state = {
+          ...state, done: state.done + attempted, enriched: state.enriched + r.enriched.length, unchanged: state.unchanged + r.unchanged.length,
+          failed: state.failed + r.failed.length, demo: state.demo || r.demo, queue: [...r.remaining, ...later, ...rest],
+        };
+        if (r.stopped) {
+          state = { ...state, stopped: r.stopped.message };
+          break;
+        }
+      } catch (e) {
+        state = { ...state, stopped: errorMessage(e), queue: [...chunk, ...later, ...rest] };
+        break;
+      }
+      setEnrich({ ...state });
+    }
+    setEnrich({ ...state, running: false });
+  };
 
   useEffect(() => {
     api<{ topics: TopicNode[] }>("/api/topics").then((t) => setTopics(t.topics)).catch(() => {});
@@ -255,8 +292,30 @@ export function ImportWizard() {
               <Button variant="primary" onClick={() => router.push(`/learn/session?mode=practice&ids=${result.createdIds.slice(0, 40).join(",")}`)}>Start learning them now</Button>
             )}
             <Button onClick={() => router.push(result.topicIds[0] ? `/vocabulary?topic=${result.topicIds[0]}` : "/vocabulary?list=recent")}>View words</Button>
-            <Button variant="ghost" onClick={() => { setStep(0); setText(""); setFile(null); setResult(null); setJob(null); }}>Import more</Button>
+            <Button variant="ghost" onClick={() => { setStep(0); setText(""); setFile(null); setResult(null); setJob(null); setEnrich(null); }}>Import more</Button>
           </div>
+          {result.createdIds.length > 0 && (
+            <div className="mt-6 border-t border-line pt-4">
+              <h3 className="text-lg">Enrich new words with AI</h3>
+              <p className="mt-1 text-sm text-ink-2">Adds definitions, collocations, examples and more to the words you just imported, {ENRICH_PER_CLICK} per click. Only empty fields are filled; nothing you entered is overwritten.</p>
+              {enrich && (
+                <div className="mt-3 space-y-2" aria-live="polite">
+                  <Meter value={enrich.total ? (enrich.done / enrich.total) * 100 : 0} label={`${enrich.done} of ${enrich.total} words processed`} tone="sage" />
+                  <p className="text-sm text-ink-2">
+                    {enrich.done} of {enrich.total} processed · {enrich.enriched} enriched{enrich.unchanged ? ` · ${enrich.unchanged} unchanged` : ""}{enrich.failed ? ` · ${enrich.failed} failed` : ""}
+                  </p>
+                  {enrich.demo && <Notice tone="warn">Demo mode (no AI provider configured): suggestions are not real dictionary data, so nothing was saved.</Notice>}
+                  {enrich.stopped && <Notice tone="danger" title="Enrichment stopped">{enrich.stopped} {enrich.queue.length} word{enrich.queue.length === 1 ? "" : "s"} not enriched yet.</Notice>}
+                </div>
+              )}
+              {(!enrich || enrich.queue.length > 0) && (
+                <Button className="mt-3" onClick={enrichNext} loading={enrich?.running} disabled={enrich?.running}>
+                  <Sparkles className="size-4" aria-hidden /> {enrich ? `Enrich next ${Math.min(ENRICH_PER_CLICK, enrich.queue.length)}` : `Enrich ${Math.min(ENRICH_PER_CLICK, result.createdIds.length)} new word${result.createdIds.length === 1 ? "" : "s"} with AI`}
+                </Button>
+              )}
+              {enrich && !enrich.queue.length && !enrich.running && <p className="mt-3 text-sm text-sage">All new words processed. Check the AI additions on each word’s page.</p>}
+            </div>
+          )}
         </Card>
       )}
     </>

@@ -1,16 +1,18 @@
 "use client";
 
 import clsx from "clsx";
-import { MessageSquarePlus, Paperclip, Send, Trash2, X } from "lucide-react";
+import { BookmarkPlus, Check, MessageSquarePlus, Paperclip, Send, Trash2, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "@/components/markdown";
-import { Badge, Button, Dialog, Input, Notice, PageHeader, Spinner } from "@/components/ui";
+import { Badge, Button, Dialog, Input, Notice, PageHeader, Spinner, useToast } from "@/components/ui";
+import { TopicSelect, type TopicNode } from "@/components/vocab/topic-select";
 import { api, errorMessage } from "@/lib/api";
 
 type Conversation = { id: string; title: string; updatedAt: string; attachedEntryIds: string[] };
 type Message = { id: string; role: "user" | "assistant"; content: string; isDemo: boolean };
 type Entry = { id: string; headword: string; translationDe?: string | null; definitionEn?: string | null };
+type Mention = { id: string; headword: string; difficult: boolean };
 
 const ACTIONS: { label: string; prompt: (w: string) => string }[] = [
   { label: "Explain the nuance", prompt: (w) => `Explain the nuance of ${w}: meaning, register, typical contexts, and how it differs from close alternatives.` },
@@ -34,6 +36,10 @@ export function Tutor() {
   const [results, setResults] = useState<Entry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [demo, setDemo] = useState(false);
+  const [topics, setTopics] = useState<TopicNode[]>([]);
+  const [topic, setTopic] = useState<{ id: string; name: string } | null>(null);
+  const [mentions, setMentions] = useState<Record<string, Mention[]>>({});
+  const toast = useToast();
   const bottom = useRef<HTMLDivElement>(null);
   const bootstrapped = useRef(false);
 
@@ -45,9 +51,11 @@ export function Tutor() {
 
   const open = useCallback(async (id: string) => {
     setActiveId(id);
-    const r = await api<{ messages: Message[]; attached: Entry[] }>(`/api/tutor/${id}`);
+    const r = await api<{ messages: Message[]; attached: Entry[]; topic: { id: string; name: string } | null; mentions: Record<string, Mention[]> }>(`/api/tutor/${id}`);
     setMessages(r.messages);
     setAttached(r.attached);
+    setTopic(r.topic);
+    setMentions(r.mentions ?? {});
     setDemo(r.messages.some((m) => m.isDemo));
   }, []);
 
@@ -85,8 +93,8 @@ export function Tutor() {
     }
   }, [activeId, streaming, open, loadList]);
 
-  const newConversation = useCallback(async (attachIds: string[] = []) => {
-    const r = await api<{ conversation: Conversation }>("/api/tutor", { method: "POST", json: { attachedEntryIds: attachIds } });
+  const newConversation = useCallback(async (attachIds: string[] = [], topicId: string | null = null) => {
+    const r = await api<{ conversation: Conversation }>("/api/tutor", { method: "POST", json: { attachedEntryIds: attachIds, topicId } });
     await loadList();
     await open(r.conversation.id);
     return r.conversation.id;
@@ -98,10 +106,12 @@ export function Tutor() {
     (async () => {
       try {
         const list = await loadList();
+        api<{ topics: TopicNode[] }>("/api/topics").then((t) => setTopics(t.topics)).catch(() => {});
         const attach = params.get("attach");
         const ask = params.get("ask");
-        if (attach || ask) {
-          const id = await newConversation(attach ? [attach] : []);
+        const topicParam = params.get("topic");
+        if (attach || ask || topicParam) {
+          const id = await newConversation(attach ? [attach] : [], topicParam);
           router.replace(`/tutor?c=${id}`);
           if (ask) await send(ask, id);
         } else if (activeId) await open(activeId);
@@ -126,6 +136,27 @@ export function Tutor() {
     if (!activeId) return;
     await api(`/api/tutor/${activeId}`, { method: "PATCH", json: { attachedEntryIds: ids } });
     await open(activeId);
+  };
+
+  const chooseTopic = async (topicId: string) => {
+    if (!activeId) return;
+    try {
+      await api(`/api/tutor/${activeId}`, { method: "PATCH", json: { topicId: topicId || null } });
+      await open(activeId);
+    } catch (e) {
+      toast({ tone: "danger", text: errorMessage(e) });
+    }
+  };
+
+  /** Save a word the tutor brought up for later practice (marks it difficult). */
+  const practiseLater = async (w: Mention) => {
+    try {
+      await api(`/api/vocab/${w.id}/difficult`, { method: "POST", json: { difficult: true } });
+      setMentions((all) => Object.fromEntries(Object.entries(all).map(([k, list]) => [k, list.map((x) => (x.id === w.id ? { ...x, difficult: true } : x))])));
+      toast({ tone: "sage", text: `“${w.headword}” saved to practise later (Difficult words)` });
+    } catch (e) {
+      toast({ tone: "danger", text: errorMessage(e) });
+    }
   };
 
   const remove = async (id: string) => {
@@ -168,6 +199,12 @@ export function Tutor() {
               <Badge key={a.id} tone="navy">{a.headword}<button type="button" aria-label={`Detach ${a.headword}`} onClick={() => setAttachments(attached.filter((x) => x.id !== a.id).map((x) => x.id))}><X className="size-3" /></button></Badge>
             ))}
             <Button size="sm" variant="ghost" onClick={() => setPickOpen(true)} disabled={!activeId}><Paperclip className="size-4" aria-hidden /> Attach words</Button>
+            {activeId && (
+              <label className="flex items-center gap-1.5 text-sm text-ink-2">
+                <span className="shrink-0">Topic</span>
+                <span className="w-44"><TopicSelect topics={topics} value={topic?.id ?? ""} onChange={(v) => void chooseTopic(v)} placeholder="Any topic" /></span>
+              </label>
+            )}
             {demo && <Badge tone="warn">demo mode: answers only from your saved data</Badge>}
           </div>
 
@@ -181,6 +218,18 @@ export function Tutor() {
             {messages.map((m) => (
               <div key={m.id} className={clsx("max-w-[92%] rounded-2xl px-4 py-3", m.role === "user" ? "ml-auto bg-navy text-navy-ink" : "bg-surface-2 text-ink")}>
                 {m.role === "assistant" ? (m.content ? <Markdown text={m.content} /> : <Spinner label="Thinking" />) : <p className="whitespace-pre-wrap">{m.content}</p>}
+                {m.role === "assistant" && mentions[m.id]?.length ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-line pt-2 text-xs">
+                    <span className="text-ink-3">Your words here · practise later:</span>
+                    {mentions[m.id].map((w) => (
+                      <button key={w.id} type="button" disabled={w.difficult} onClick={() => practiseLater(w)}
+                        aria-label={w.difficult ? `${w.headword} is saved to practise later` : `Practise ${w.headword} later`}
+                        className={clsx("inline-flex items-center gap-1 rounded-full border px-2 py-0.5", w.difficult ? "border-sage/40 text-sage" : "border-line text-ink-2 hover:border-navy hover:text-navy")}>
+                        {w.difficult ? <Check className="size-3" aria-hidden /> : <BookmarkPlus className="size-3" aria-hidden />}{w.headword}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
             {error && <Notice tone="danger">{error}</Notice>}

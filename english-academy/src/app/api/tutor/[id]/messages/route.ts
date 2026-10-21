@@ -10,10 +10,10 @@ export const maxDuration = 120;
 export const POST = route<{ id: string }>(async (req, { id }) => {
   const { user, db } = await ctx();
   const { content } = await parseJson(req, z.object({ content: z.string().trim().min(1).max(6000) }));
-  const { messages, attached } = await getConversation(db, user.id, id);
+  const { conversation, messages, attached } = await getConversation(db, user.id, id);
   await addMessage(db, user.id, id, "user", content);
   const history = [...messages.slice(-20).map((m) => ({ role: m.role as "user" | "assistant", content: m.content })), { role: "user" as const, content }];
-  const system = await tutorContext(db, user.id, attached);
+  const system = await tutorContext(db, user.id, attached, conversation.topicId);
   const demoText = await demoTutorReply(db, user.id, content, attached);
   const stream = await streamTutor(db, user.id, system, history, () => demoText);
   const encoder = new TextEncoder();
