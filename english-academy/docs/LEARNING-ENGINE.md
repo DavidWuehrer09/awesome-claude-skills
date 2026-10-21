@@ -96,13 +96,13 @@ the daily limits. It returns the cards for the session, each with a reason:
 
    These cards do **not** change the schedule (`schedule: false`).
 
-   **Exam close.** When the exam date in Settings is at most 8 weeks away (`examPrepActive`,
-   until the exam day), the extra-practice share grows to 40 % and about two thirds of it goes
+   **Exam close or target topics.** When the exam date in Settings is at most 8 weeks away
+   (`examPrepActive`, until the exam day), or the learner has chosen target topics, the extra-practice share grows to 40 % and about two thirds of it goes
    to exam-relevant words first. Every not-due word of those topics is a candidate, not only the
    weak ones, ranked by the weaker of production and collocation mastery (then lapses); the
    reason is shown as *Exam preparation* unless a weakness reason applies. Exam-relevant topics
-   are the learner's topics (and their subtopics) whose names match the topic labels of uploaded
-   exam materials; when nothing matches, every word counts. Review-only sessions are unchanged.
+   are the target topics chosen in Settings plus the topics whose names match the topic labels of
+   uploaded exam materials, each with its subtopics; when there are none, every word counts. Review-only sessions are unchanged.
 3. **New words,** up to the daily new-word limit.
 4. **Interleaving.** Cards from different topics alternate, except in focused-topic mode.
 

@@ -122,17 +122,18 @@ export type SessionCard = {
 };
 
 /**
- * Topics relevant to the exam: the learner's topics whose names match the
- * topic labels of their uploaded exam materials. null = no match, so every
- * word counts as exam-relevant.
+ * Topics relevant to the exam: the target topics the learner chose in Settings,
+ * plus topics whose names match the topic labels of their uploaded exam
+ * materials (and their subtopics). null = none, so every word counts.
  */
-async function examTopicIds(db: Db, userId: string): Promise<string[] | null> {
+async function examTopicIds(db: Db, userId: string, targetTopicIds: string[] = []): Promise<string[] | null> {
   const [materials, rows] = await Promise.all([
     db.select({ labels: examMaterials.labels }).from(examMaterials).where(eq(examMaterials.userId, userId)),
     db.select({ id: topics.id, name: topics.name, parentId: topics.parentId }).from(topics).where(eq(topics.userId, userId)),
   ]);
   const wanted = new Set(materials.flatMap((m) => m.labels.topic ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean));
-  const matched = new Set(rows.filter((t) => wanted.has(t.name.trim().toLowerCase())).map((t) => t.id));
+  const own = new Set(rows.map((t) => t.id));
+  const matched = new Set([...rows.filter((t) => wanted.has(t.name.trim().toLowerCase())).map((t) => t.id), ...targetTopicIds.filter((id) => own.has(id))]);
   // Subtopics of a matched topic belong to it.
   let grew = true;
   while (grew) {
@@ -160,7 +161,10 @@ export async function buildSession(db: Db, userId: string, input: z.input<typeof
   if (req.entryIds?.length) {
     queue = req.entryIds.filter((id) => poolById.has(id)).map((entryId) => ({ entryId, reason: "selected" as const, schedule: false }));
   } else {
-    const examFocus = req.mode !== "review" && examPrepActive(settings.examDate, now) ? { topicIds: await examTopicIds(db, userId) } : null;
+    // Near the exam, exam-relevant words get more of the extra practice; target topics are always preferred there.
+    const examFocus = req.mode !== "review" && (examPrepActive(settings.examDate, now) || settings.targetTopicIds.length > 0)
+      ? { topicIds: await examTopicIds(db, userId, settings.targetTopicIds) }
+      : null;
     const qs = [...states.values()].filter((s) => poolById.has(s.entryId)).map((s) => toQueueState(s, poolById.get(s.entryId)!.topicIds ?? []));
     const result = buildQueue(qs, {
       now,
