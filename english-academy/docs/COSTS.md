@@ -91,7 +91,7 @@ A new account gets `DEFAULT_PLAN` (by default `free`). The built-in Free plan al
 
 | Category | Free | Plus | Unlimited |
 |---|---|---|---|
-| Vocabulary exercises and word help | 60 | 600 | ∞ |
+| Exercises, word help and sentence feedback (incl. Improvement Lab) | 60 | 600 | ∞ |
 | Exam generation | 2 | 15 | ∞ |
 | Essay and exam assessment | 4 | 30 | ∞ |
 | AI tutor messages | 30 | 300 | ∞ |

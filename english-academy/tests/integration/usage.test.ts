@@ -48,7 +48,7 @@ describe("plan allowances", () => {
     const err = await runFeature(db, u.alice.id, "classify", input).catch((e) => e);
     expect(err).toBeInstanceOf(AIError);
     expect(err).toMatchObject({ code: "quota", status: 429, details: { category: "exercises", used: 2, limit: 2 } });
-    expect(err.message).toMatch(/2 vocabulary exercises/);
+    expect(err.message).toMatch(/2 exercises, word help and sentence feedback/);
     expect(structured).toHaveBeenCalledTimes(2);
     const a = await usage.allowanceFor(db, u.alice.id);
     expect(a.categories.find((c) => c.category === "exercises")).toMatchObject({ used: 2, limit: 2 });

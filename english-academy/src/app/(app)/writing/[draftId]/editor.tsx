@@ -297,7 +297,7 @@ function SelectionFeedback({ textRef, prompt }: { textRef: React.RefObject<HTMLT
           {result.demo ? <Notice tone="warn" title="Demo mode">{result.overall}</Notice> : result.overall && <Notice tone="accent">{result.overall}</Notice>}
           {result.items.map((item, i) => <LabItemCard key={i} item={item} />)}
           {!result.demo && !result.items.length && <p className="text-sm text-ink-3">No specific passage needed improvement.</p>}
-          <p className="text-xs text-ink-3">AI feedback can be wrong. It counts towards your assessment allowance.</p>
+          <p className="text-xs text-ink-3">AI feedback can be wrong. It counts towards your monthly exercise allowance.</p>
         </div>
       )}
     </Card>

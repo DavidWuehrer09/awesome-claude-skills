@@ -22,7 +22,7 @@ export const CATEGORIES = ["exercises", "exam_generation", "assessment", "tutor"
 export type Category = (typeof CATEGORIES)[number];
 
 export const CATEGORY_LABEL: Record<Category, string> = {
-  exercises: "Vocabulary exercises and word help",
+  exercises: "Exercises, word help and sentence feedback",
   exam_generation: "Exam generation",
   assessment: "Essay and exam assessment",
   tutor: "AI tutor messages",
@@ -34,7 +34,7 @@ const FEATURE_CATEGORY: Record<string, Category> = {
   parseList: "documents", examTranscribe: "documents", examProfileSuggest: "documents",
   examGenerate: "exam_generation",
   assess: "assessment", examAssess: "assessment", examDispute: "assessment",
-  tutor: "tutor", examExplain: "tutor", examLab: "assessment", examDrills: "exercises",
+  tutor: "tutor", examExplain: "tutor", examLab: "exercises", examDrills: "exercises",
 };
 
 export function categoryOf(feature: string): Category {
