@@ -1,8 +1,9 @@
 # Learning engine
 
 How the app decides what to show, how answers are graded, and when a word counts as known.
-Everything here is deterministic and runs without AI. The AI only enriches entries and
-evaluates free-text answers.
+Everything here is deterministic and runs without AI. The AI only enriches entries,
+evaluates free-text answers and gives a labelled second opinion on typed answers that the
+deterministic check marked wrong (section 5).
 
 Code: `src/domain/learning/` (pure functions, unit-tested) and `src/server/repos/learning.ts`
 (persistence).
@@ -94,6 +95,14 @@ the daily limits. It returns the cards for the session, each with a reason:
    - never used in writing
 
    These cards do **not** change the schedule (`schedule: false`).
+
+   **Exam close.** When the exam date in Settings is at most 8 weeks away (`examPrepActive`,
+   until the exam day), the extra-practice share grows to 40 % and about two thirds of it goes
+   to exam-relevant words first. Every not-due word of those topics is a candidate, not only the
+   weak ones, ranked by the weaker of production and collocation mastery (then lapses); the
+   reason is shown as *Exam preparation* unless a weakness reason applies. Exam-relevant topics
+   are the learner's topics (and their subtopics) whose names match the topic labels of uploaded
+   exam materials; when nothing matches, every word counts. Review-only sessions are unchanged.
 3. **New words,** up to the daily new-word limit.
 4. **Interleaving.** Cards from different topics alternate, except in focused-topic mode.
 
@@ -104,15 +113,35 @@ Session modes:
 - `focused`: one topic, not interleaved.
 - `practice`: free practice on any word, never scheduled.
 
+The Practice page has one topic picker for all non-AI modes; the chosen topic is passed to the
+session as `topic` and narrows `buildQueue()` (and the Mastery Check) to that topic.
+
 ## 4. Exercise choice (`exercises.ts`)
 
-There are 12 deterministic exercise kinds, generated from the entry's own data. Examples are
+There are 13 deterministic exercise kinds, generated from the entry's own data. Examples are
 flip cards, typed recall, cloze from the learner's example sentences, collocation choice,
-confusable choice and word forms.
+confusable choice, word forms and the EN→DE meaning check (an English example sentence with the
+word; the learner types its German meaning, checked against every listed translation with the
+rules of section 5).
 
 `chooseKind()` picks the hardest kind the word is ready for. New words start with recognition and
 meaning. Production and collocation follow once meaning is stable. A kind is only offered if the
 entry has the data for it (no cloze without an example sentence).
+
+**Missed words in a session.** A wrong or revealed answer brings the word back a few cards
+later (at most twice, as unscheduled practice). Each retry uses a different kind
+(`retryKinds()`): recall in context first (cloze, collocation, definition → word, typed recall,
+EN→DE, own sentence), recognition last. A session limited to several kinds (the sprint) keeps
+that limit; a single-kind mode may retry with any other kind. Only a word that supports no other
+kind repeats the same card. The server attaches the retry exercises to each card, so this also
+works offline.
+
+**Adaptive Mixed Challenge.** The Mixed Challenge (`adaptive=1`) attaches one exercise per
+difficulty tier to each card (`KIND_TIER`: 1 recognition, 2 guided recall, 3 typed recall and
+cloze, 4 collocation and own sentences). `adaptiveTier()` starts at tier 2; two successes in a row
+move one tier up, an error one tier down, a partly correct answer resets the streak. The next
+card's exercise is the variant closest to the current tier (the easier one on a tie), so the
+sequence is deterministic for the same answers.
 
 The AI generates a further set (translation, error correction, transformation, context choice,
 Sentence Lab). These exercises are optional and validated against a schema.
@@ -135,6 +164,23 @@ If the learner thinks an answer was graded unfairly, they can press "Accept my a
 answer is added to that entry's `acceptedAnswers`, is visible and editable in the word editor, and
 from then on counts as an *alternative*. The current card is treated the same way, so it is
 capped at Hard.
+
+**AI second opinion.** When the verdict is a plain *wrong* (not empty, typo, wrong form or
+confused) for a recall, cloze, collocation or EN→DE card, and a real AI provider is available and
+enabled, the app automatically asks the small `answerCheck` feature (fast model, low effort)
+whether the answer is a valid synonym or translation in this context. If it is, the card counts
+as an *alternative* (capped at Hard, target word shown) and the AI's explanation is shown with an
+"AI check" label; if not, the AI's short explanation of the difference is shown. Nothing is added
+to `acceptedAnswers` automatically. In demo mode, or when AI is off or over its allowance, the
+deterministic verdict stays unchanged (no imitation judgement). The "My answer is also correct"
+button remains available.
+
+## 5a. During a session
+
+- **Mark as difficult.** The flag button in the session header marks the current word as
+  difficult (`/api/vocab/[id]/difficult`), which feeds the *difficult* extra-practice reason.
+- **Mastery Check report.** Besides the per-dimension summary, the report lists every word as
+  *secure* or *weak* with the dimensions that failed. Retries after a miss are not counted.
 
 ## 6. Writing → vocabulary
 

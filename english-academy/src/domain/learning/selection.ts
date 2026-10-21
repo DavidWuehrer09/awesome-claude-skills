@@ -20,7 +20,7 @@ export type QueueState = {
   introduced: boolean;
 };
 
-export type QueueReason = "overdue" | "due" | "relearning" | "new" | "weak_production" | "weak_collocation" | "not_in_writing" | "difficult" | "practice";
+export type QueueReason = "overdue" | "due" | "relearning" | "new" | "weak_production" | "weak_collocation" | "not_in_writing" | "difficult" | "exam_prep" | "practice";
 
 export type QueueItem = { entryId: string; reason: QueueReason; schedule: boolean };
 
@@ -33,7 +33,28 @@ export type QueueOptions = {
   mode: "review" | "focused" | "mixed" | "practice";
   topicId?: string | null;
   secondsPerItem?: number;
+  /**
+   * Set when the exam is close (see examPrepActive): words in these topics get
+   * a larger share of the extra-practice slots. topicIds null = every word.
+   */
+  examFocus?: { topicIds: string[] | null } | null;
 };
+
+/** Exam preparation weighting applies from 8 weeks before the exam date (YYYY-MM-DD) until the exam day. */
+export const EXAM_PREP_DAYS = 56;
+
+export function examPrepActive(examDate: string | null | undefined, now: Date): boolean {
+  if (!examDate || !/^\d{4}-\d{2}-\d{2}$/.test(examDate)) return false;
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const days = Math.round((Date.parse(`${examDate}T00:00:00Z`) - today) / 86400000);
+  return days >= 0 && days <= EXAM_PREP_DAYS;
+}
+
+/** Share of the session reserved for extra practice (not due) in mixed/focused sessions. */
+const EXTRA_SHARE = 0.25;
+const EXTRA_SHARE_EXAM = 0.4;
+/** With an exam close, this part of the extra slots goes to exam-relevant words first. */
+const EXAM_QUOTA = 2 / 3;
 
 export type QueueResult = {
   items: QueueItem[];
@@ -62,6 +83,11 @@ export function interleave<T extends { topicKey: string }>(items: T[]): T[] {
     if (lists.every((l) => !l.length)) break;
   }
   return out;
+}
+
+/** Lower = more in need of exam practice: the weaker of active production and collocations. */
+function examWeakness(s: QueueState): number {
+  return Math.min(s.mastery.production?.score ?? 0, s.mastery.collocation?.score ?? 0);
 }
 
 export function buildQueue(states: QueueState[], opts: QueueOptions): QueueResult {
@@ -114,8 +140,29 @@ export function buildQueue(states: QueueState[], opts: QueueOptions): QueueResul
       })
       .filter((x): x is { s: QueueState; reason: QueueReason } => !!x)
       .sort((a, b) => (b.s.lapses - a.s.lapses) || ((a.s.mastery.production?.score ?? 0) - (b.s.mastery.production?.score ?? 0)));
-    const takeWeak = opts.mode === "practice" ? room : Math.min(room, Math.ceil(capacity * 0.25));
-    for (const { s, reason } of weak.slice(0, takeWeak)) {
+    const exam = opts.examFocus;
+    const takeWeak = opts.mode === "practice" ? room : Math.min(room, Math.ceil(capacity * (exam ? EXTRA_SHARE_EXAM : EXTRA_SHARE)));
+    const extra: { s: QueueState; reason: QueueReason }[] = [];
+    if (exam) {
+      // Exam close: every word of the exam-relevant topics is a candidate (not only weak ones),
+      // weakest production/collocation first; they fill most of the extra slots.
+      const weakReason = new Map(weak.map((w) => [w.s.entryId, w.reason]));
+      const relevant = notDue
+        .filter((s) => !exam.topicIds || s.topicIds.some((t) => exam.topicIds!.includes(t)))
+        .map((s) => ({ s, reason: weakReason.get(s.entryId) ?? ("exam_prep" as QueueReason) }))
+        .sort((a, b) => examWeakness(a.s) - examWeakness(b.s) || (b.s.lapses - a.s.lapses));
+      const quota = Math.ceil(takeWeak * EXAM_QUOTA);
+      extra.push(...relevant.slice(0, quota));
+      const picked = new Set(extra.map((x) => x.s.entryId));
+      extra.push(...weak.filter((w) => !picked.has(w.s.entryId)), ...relevant.slice(quota));
+    } else {
+      extra.push(...weak);
+    }
+    const seen = new Set<string>();
+    for (const { s, reason } of extra) {
+      if (seen.size >= takeWeak) break;
+      if (seen.has(s.entryId)) continue;
+      seen.add(s.entryId);
       items.push({ entryId: s.entryId, reason, schedule: false, topicKey: s.topicIds[0] ?? "none" });
     }
     room = capacity - items.length;
@@ -152,5 +199,6 @@ export const REASON_LABEL: Record<QueueReason, string> = {
   weak_collocation: "Weak collocations",
   not_in_writing: "Not yet used in writing",
   difficult: "Difficult word",
+  exam_prep: "Exam preparation",
   practice: "Extra practice",
 };

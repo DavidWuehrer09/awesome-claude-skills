@@ -1,8 +1,10 @@
 /**
- * Deterministic typed-answer checking. AI judgement is only used for free
- * production (sentences, translations), never to silently overrule these
- * verdicts. A learner can add an accepted answer to a word explicitly; that
- * change is stored on the entry (acceptedAnswers) and is therefore traceable.
+ * Deterministic typed-answer checking. AI judgement is used for free
+ * production (sentences, translations) and, visibly labelled, as a second
+ * opinion on a plain "wrong" verdict (is it a valid synonym here?); it never
+ * silently overrules these verdicts. A learner can add an accepted answer to
+ * a word explicitly; that change is stored on the entry (acceptedAnswers) and
+ * is therefore traceable.
  */
 import { levenshtein, normalizeTypography } from "@/lib/text";
 

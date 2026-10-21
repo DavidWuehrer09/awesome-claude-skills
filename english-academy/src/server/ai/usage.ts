@@ -35,6 +35,7 @@ const FEATURE_CATEGORY: Record<string, Category> = {
   examGenerate: "exam_generation",
   assess: "assessment", examAssess: "assessment", examDispute: "assessment",
   tutor: "tutor", examExplain: "tutor", examLab: "exercises", examDrills: "exercises",
+  answerCheck: "exercises",
 };
 
 export function categoryOf(feature: string): Category {

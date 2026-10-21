@@ -37,7 +37,8 @@ export type ExerciseKind =
   | "synonym_choice"
   | "antonym_choice"
   | "word_family"
-  | "production";
+  | "production"
+  | "meaning_en_de";
 
 export type Exercise = {
   id: string;
@@ -77,6 +78,7 @@ export const KIND_LABEL: Record<ExerciseKind, string> = {
   antonym_choice: "Antonyms",
   word_family: "Word family",
   production: "Active production",
+  meaning_en_de: "EN → DE meaning",
 };
 
 // ---------------------------------------------------------------- seeded randomness
@@ -148,6 +150,24 @@ function distractorWords(e: EntryLite, pool: EntryLite[], random: () => number, 
   const samePos = candidates.filter((p) => p.partOfSpeech && p.partOfSpeech === e.partOfSpeech);
   const source = samePos.length >= n ? samePos : candidates;
   return shuffle(source, random).slice(0, n).map((p) => p.headword);
+}
+
+/**
+ * Accepted German answers for an EN→DE meaning check: every listed translation
+ * ("verschärfen, verschlimmern"), with and without bracketed additions.
+ */
+export function germanMeaningAnswers(translationDe: string): string[] {
+  const parts = translationDe
+    .split(/[,;/]|\s+oder\s+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const out = new Set<string>();
+  for (const p of parts) {
+    out.add(p);
+    const bare = p.replace(/\([^)]*\)|\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
+    if (bare) out.add(bare);
+  }
+  return [...out];
 }
 
 // ---------------------------------------------------------------- generators
@@ -287,6 +307,20 @@ const generators: Record<ExerciseKind, Gen> = {
     context: [e.definitionEn, e.collocations[0] ? `Try: ${e.collocations[0]}` : null].filter(Boolean).join(" · "),
     answer: { type: "free", targetWord: e.headword }, recognitionOnly: false, reveal: reveal(e),
   }),
+  meaning_en_de: (e, _p, random, id) => {
+    if (!e.translationDe) return null;
+    for (const sentence of shuffle(e.examples, random)) {
+      const m = inflectionPattern(e.headword)?.exec(sentence);
+      if (!m) continue;
+      return {
+        id, entryId: e.id, kind: "meaning_en_de", dimension: "meaning", title: "What does the word mean here? (German)",
+        prompt: sentence, context: `Give the German meaning of “${m[0]}” in this sentence.`,
+        answer: { type: "typed", spec: { expected: germanMeaningAnswers(e.translationDe) } },
+        recognitionOnly: false, reveal: { ...reveal(e), example: sentence },
+      };
+    }
+    return null;
+  },
 };
 
 export function generateExercise(kind: ExerciseKind, e: EntryLite, pool: EntryLite[], seed: string): Exercise | null {
@@ -316,7 +350,7 @@ export function chooseKind(
   if (info.reps === 0) preference = ["flip_en_de", "meaning_choice", "typed_definition"];
   else if (info.difficult || info.lapses >= 3) preference = shuffle(["typed_de_en", "typed_definition", "cloze", "collocation", "production"], random);
   else if (info.overconfidence >= 2) preference = ["typed_de_en", "typed_definition", "cloze"];
-  else if (info.stability < 4) preference = shuffle(["flip_de_en", "typed_de_en", "typed_definition", "meaning_choice", "synonym_choice"], random);
+  else if (info.stability < 4) preference = shuffle(["flip_de_en", "typed_de_en", "typed_definition", "meaning_choice", "synonym_choice", "meaning_en_de"], random);
   else {
     // familiar: demanding types, weighted towards the weakest dimension
     const weakCol = (m.collocation?.score ?? 0) < 0.6;
@@ -339,7 +373,94 @@ export function evidenceFor(ex: Pick<Exercise, "kind" | "dimension">, success: n
     ev.recognition = Math.max(success, 0.5);
   }
   if (ex.kind === "cloze") ev.grammar = success;
-  if (ex.kind === "flip_en_de") ev.recognition = success;
+  if (ex.kind === "flip_en_de" || ex.kind === "meaning_en_de") ev.recognition = success;
   if (ex.kind === "production") ev.grammar = success;
   return ev;
+}
+
+// ---------------------------------------------------------------- in-session retry
+
+/** Kinds for retrying a missed word, most useful first: recall in context before recognition. */
+const RETRY_ORDER: ExerciseKind[] = [
+  "cloze", "collocation", "typed_definition", "typed_de_en", "meaning_en_de", "production",
+  "word_family", "nuance", "meaning_choice", "flip_de_en", "flip_en_de", "synonym_choice", "antonym_choice",
+];
+
+/**
+ * Exercise kinds for in-session retries of a missed word: each retry uses a
+ * different kind than the miss (and than the other retry), so the learner
+ * meets the word from another angle instead of repeating the same card.
+ * A session restricted to several kinds (e.g. the sprint) keeps its
+ * restriction; a single-kind session may retry with any other kind.
+ * Empty when the word supports no other kind (the runner then repeats the card).
+ */
+export function retryKinds(missed: ExerciseKind, available: ExerciseKind[], allowed?: ExerciseKind[], count = 2): ExerciseKind[] {
+  const scope = allowed && allowed.length > 1 ? allowed : undefined;
+  const avail = new Set(available.filter((k) => !scope || scope.includes(k)));
+  return RETRY_ORDER.filter((k) => k !== missed && avail.has(k)).slice(0, count);
+}
+
+export function retryExercises(missed: Exercise, e: EntryLite, pool: EntryLite[], seed: string, allowed?: ExerciseKind[]): Exercise[] {
+  return retryKinds(missed.kind, availableKinds(e, pool), allowed)
+    .map((k) => generateExercise(k, e, pool, `${seed}:retry`))
+    .filter((x): x is Exercise => !!x);
+}
+
+// ---------------------------------------------------------------- adaptive challenge
+
+/** Difficulty tier of each kind for the adaptive Mixed Challenge (1 = recognition … 4 = production). */
+export const KIND_TIER: Record<ExerciseKind, 1 | 2 | 3 | 4> = {
+  flip_en_de: 1, meaning_choice: 1, synonym_choice: 1, antonym_choice: 1,
+  flip_de_en: 2, nuance: 2, typed_definition: 2, meaning_en_de: 2,
+  typed_de_en: 3, cloze: 3, word_family: 3,
+  collocation: 4, production: 4,
+};
+
+export const ADAPTIVE_START_TIER = 2;
+
+/**
+ * Current difficulty tier from the session's outcomes so far (deterministic):
+ * two successes in a row move one tier up, an error moves one tier down,
+ * a partly correct answer resets the streak without moving.
+ */
+export function adaptiveTier(outcomes: string[]): number {
+  let tier = ADAPTIVE_START_TIER;
+  let streak = 0;
+  for (const o of outcomes) {
+    if (o === "correct" || o === "alternative" || o === "typo") {
+      streak++;
+      if (streak >= 2) {
+        tier = Math.min(4, tier + 1);
+        streak = 0;
+      }
+    } else if (o === "partial") {
+      streak = 0;
+    } else {
+      tier = Math.max(1, tier - 1);
+      streak = 0;
+    }
+  }
+  return tier;
+}
+
+/** One exercise per difficulty tier the word supports (seeded choice within a tier), easiest first. */
+export function adaptiveVariants(e: EntryLite, pool: EntryLite[], seed: string, allowed?: ExerciseKind[]): Exercise[] {
+  const random = rng(hashString(`${seed}:${e.id}:adaptive`));
+  const avail = shuffle(availableKinds(e, pool).filter((k) => !allowed || allowed.includes(k)), random);
+  const out: Exercise[] = [];
+  for (const tier of [1, 2, 3, 4]) {
+    const kind = avail.find((k) => KIND_TIER[k] === tier);
+    const ex = kind ? generateExercise(kind, e, pool, seed) : null;
+    if (ex) out.push(ex);
+  }
+  return out;
+}
+
+/** The variant closest to the wanted tier; on a tie the easier one. */
+export function pickVariant(variants: Exercise[], tier: number): Exercise | undefined {
+  let best: Exercise | undefined;
+  for (const v of variants) {
+    if (!best || Math.abs(KIND_TIER[v.kind] - tier) < Math.abs(KIND_TIER[best.kind] - tier)) best = v;
+  }
+  return best;
 }

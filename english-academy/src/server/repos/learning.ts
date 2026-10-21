@@ -3,16 +3,27 @@ import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "@/db/client";
 import {
+  examMaterials,
   learningStates,
   reviewEvents,
   studySessions,
   topicMemberships,
+  topics,
   userSettings,
   vocabEntries,
   vocabExamples,
   type MasteryMap,
 } from "@/db/schema";
-import { chooseKind, evidenceFor, generateExercise, type EntryLite, type Exercise, type ExerciseKind } from "@/domain/learning/exercises";
+import {
+  adaptiveVariants,
+  chooseKind,
+  evidenceFor,
+  generateExercise,
+  retryExercises,
+  type EntryLite,
+  type Exercise,
+  type ExerciseKind,
+} from "@/domain/learning/exercises";
 import { applyEvidence } from "@/domain/learning/mastery";
 import {
   deriveRating,
@@ -24,7 +35,7 @@ import {
   State,
   type SchedulingState,
 } from "@/domain/learning/scheduler";
-import { buildQueue, type QueueReason, type QueueState } from "@/domain/learning/selection";
+import { buildQueue, examPrepActive, type QueueReason, type QueueState } from "@/domain/learning/selection";
 import { endOfLocalDay, startOfLocalDay } from "@/lib/time";
 import { conflict, notFound } from "../http";
 
@@ -95,6 +106,8 @@ export const sessionRequestSchema = z.object({
   kinds: z.array(z.string()).max(20).optional(),
   entryIds: z.array(z.string().uuid()).max(200).optional(),
   seed: z.string().max(64).optional(),
+  /** Mixed Challenge: attach one variant per difficulty tier so the runner can adapt. */
+  adaptive: z.boolean().optional(),
 });
 
 export type SessionCard = {
@@ -102,7 +115,37 @@ export type SessionCard = {
   reason: QueueReason | "selected";
   schedule: boolean;
   intervals: Record<number, string> | null;
+  /** Different exercise kinds for in-session retries after a miss (in order). */
+  retries: Exercise[];
+  /** Adaptive sessions only: one exercise per difficulty tier, easiest first. */
+  variants?: Exercise[];
 };
+
+/**
+ * Topics relevant to the exam: the learner's topics whose names match the
+ * topic labels of their uploaded exam materials. null = no match, so every
+ * word counts as exam-relevant.
+ */
+async function examTopicIds(db: Db, userId: string): Promise<string[] | null> {
+  const [materials, rows] = await Promise.all([
+    db.select({ labels: examMaterials.labels }).from(examMaterials).where(eq(examMaterials.userId, userId)),
+    db.select({ id: topics.id, name: topics.name, parentId: topics.parentId }).from(topics).where(eq(topics.userId, userId)),
+  ]);
+  const wanted = new Set(materials.flatMap((m) => m.labels.topic ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean));
+  const matched = new Set(rows.filter((t) => wanted.has(t.name.trim().toLowerCase())).map((t) => t.id));
+  // Subtopics of a matched topic belong to it.
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const t of rows) {
+      if (t.parentId && matched.has(t.parentId) && !matched.has(t.id)) {
+        matched.add(t.id);
+        grew = true;
+      }
+    }
+  }
+  return matched.size ? [...matched] : null;
+}
 
 /** Build a study session: queue + one exercise per card. */
 export async function buildSession(db: Db, userId: string, input: z.input<typeof sessionRequestSchema>, now = new Date()) {
@@ -117,6 +160,7 @@ export async function buildSession(db: Db, userId: string, input: z.input<typeof
   if (req.entryIds?.length) {
     queue = req.entryIds.filter((id) => poolById.has(id)).map((entryId) => ({ entryId, reason: "selected" as const, schedule: false }));
   } else {
+    const examFocus = req.mode !== "review" && examPrepActive(settings.examDate, now) ? { topicIds: await examTopicIds(db, userId) } : null;
     const qs = [...states.values()].filter((s) => poolById.has(s.entryId)).map((s) => toQueueState(s, poolById.get(s.entryId)!.topicIds ?? []));
     const result = buildQueue(qs, {
       now,
@@ -126,6 +170,7 @@ export async function buildSession(db: Db, userId: string, input: z.input<typeof
       reviewLimitRemaining: Math.max(0, settings.dailyReviewLimit - counters.scheduledToday),
       mode: req.mode,
       topicId: req.topicId,
+      examFocus,
     });
     queue = result.items;
     meta = { dueTotal: result.dueTotal, overdueTotal: result.overdueTotal, deferred: result.deferred, newAvailable: result.newAvailable };
@@ -148,7 +193,11 @@ export async function buildSession(db: Db, userId: string, input: z.input<typeof
       const p = previewIntervals(rowToScheduling(st), now, scheduler);
       intervals = Object.fromEntries(Object.entries(p).map(([k, d]) => [k, formatInterval(now, d)]));
     }
-    cards.push({ exercise: ex, reason: item.reason, schedule: item.schedule, intervals });
+    cards.push({
+      exercise: ex, reason: item.reason, schedule: item.schedule, intervals,
+      retries: retryExercises(ex, entry, pool, seed, allowed),
+      ...(req.adaptive ? { variants: adaptiveVariants(entry, pool, seed, allowed) } : {}),
+    });
   }
   return { cards, meta: { ...meta, ...counters, minutes: req.minutes ?? settings.sessionMinutes } };
 }
