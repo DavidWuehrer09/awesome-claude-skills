@@ -13,7 +13,9 @@
     "test:integration": "vitest run tests/integration",
     "test:e2e": "next build && playwright test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node scripts/migrate.mjs"
+    "db:migrate": "node scripts/migrate.mjs",
+    "serve:https": "node scripts/local-https/server.mjs",
+    "start:https": "next build && node scripts/local-https/server.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
@@ -44,6 +46,7 @@
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
+    "qrcode": "^1.5.4",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",

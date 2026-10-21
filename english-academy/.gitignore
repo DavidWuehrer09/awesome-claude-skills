@@ -46,3 +46,6 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 tsconfig.tsbuildinfo
+
+# local HTTPS certificates (private key!)
+/.certs/

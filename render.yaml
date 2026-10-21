@@ -1,0 +1,41 @@
+# Render Blueprint for the English Academy app (english-academy/).
+# In the Render dashboard: New → Blueprint → choose this repository and branch.
+# Render then creates the web service and the PostgreSQL database and serves the
+# app over HTTPS at https://<name>.onrender.com.
+#
+# Plans: "free" keeps the cost at zero but Render limits free services (a free
+# web service sleeps when idle; free databases are limited/temporary). Check
+# Render's pricing page, and switch both to paid plans for real use.
+# This file follows Render's published examples but has not been deployed by us yet.
+databases:
+  - name: english-academy-db
+    plan: free
+    databaseName: academy
+    user: academy
+
+services:
+  - type: web
+    name: english-academy
+    runtime: node
+    plan: free
+    # --include=dev: the build needs TypeScript and Tailwind, which are dev dependencies
+    buildCommand: cd english-academy && npm ci --include=dev && npm run build
+    startCommand: cd english-academy && npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: english-academy-db
+          property: connectionString
+      - key: APP_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      # Demo mode until you add an Anthropic API key (Environment tab):
+      # set AI_PROVIDER=anthropic and ANTHROPIC_API_KEY, plus AI_BUDGET_DAILY_USD / AI_BUDGET_MONTHLY_USD.
+      - key: AI_PROVIDER
+        value: demo
+      # After the first deploy, set APP_URL to the https address Render shows
+      # and ADMIN_EMAILS to your e-mail address (Environment tab).

@@ -57,11 +57,32 @@ npm run dev            # http://localhost:3000, embedded database, demo AI, no k
 
 Optional: copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY` with `AI_PROVIDER=anthropic` for real AI output. That is billed to your API key.
 
+## Use it on iPhone or iPad
+
+iOS only installs web apps (Add to Home Screen, offline mode, push) from secure `https://` addresses. There are two ways.
+
+**At home, from your computer (no accounts needed):**
+
+```bash
+npm run start:https     # builds, then serves https://<your-computer>:3443 on your Wi-Fi
+```
+
+1. The terminal shows a QR code. Scan it with the iPhone/iPad camera to open the setup page, `http://<your-computer>:3080`.
+2. The setup page walks you through a one-time install of the computer's local certificate (download, install, enable trust).
+3. Open the app and tap **Share → Add to Home Screen**.
+
+About the local certificate:
+- It is created on your computer in `.certs/`, which is git-ignored. Keep that folder private.
+- It is limited by name constraints to private network addresses and local names, so it can never vouch for a real website.
+- It works only while the computer is running and the device is on the same network.
+
+**Online, from anywhere:** deploy with the Render Blueprint (`render.yaml` in the repository root) or another host. You get a public `https://` address with a regular certificate and no setup on the device. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Tests
 
 | Command | What | Last result (2026-10-20) |
 |---|---|---|
-| `npm test` | Unit + integration tests (FSRS, answer checking, parsing, time zones, examiner honesty checks, allowances and budgets, reminders, repositories on an in-memory Postgres) | 103 passed |
+| `npm test` | Unit + integration tests (FSRS, answer checking, parsing, time zones, examiner honesty checks, allowances and budgets, reminders, local HTTPS certificates, repositories on an in-memory Postgres) | 106 passed |
 | `npm run test:e2e` | Production build + Playwright: onboarding, import, study session, practice, mind map, writing, tutor, reminders, examiner flow, data isolation, admin access, iPhone layout | 16 passed |
 | `npm run lint`, `npm run typecheck` | ESLint, TypeScript | clean |
 

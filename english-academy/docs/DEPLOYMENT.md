@@ -64,11 +64,17 @@ Caveats (⚠️ reported, not verified):
 - **Vercel Hobby** is described as non-commercial and only runs cron jobs once a day.
 - Exam generation and assessment use up to 300 s (`maxDuration`). That is reported as the Hobby maximum.
 
-### B. Render (always-on server)
+### B. Render (Blueprint: web service + PostgreSQL, HTTPS included)
 
-1. Create a PostgreSQL instance and a **Web Service** from the repository, with root directory `english-academy`.
-2. Build command: `npm ci && npm run db:migrate && npm run build`. Start command: `npm start`.
-3. Set the environment variables, including `DATABASE_URL` from the Render database.
+`render.yaml` in the **repository root** describes both services.
+1. In the Render dashboard, choose **New → Blueprint**, then pick the repository and the branch (`english-academy-app`).
+2. Render creates the database and the web service. It generates `APP_SECRET` and `CRON_SECRET` and starts in demo AI mode.
+3. After the first deploy, set `APP_URL` (the `https://….onrender.com` address) and `ADMIN_EMAILS` in the service's Environment tab.
+4. For real AI, also set `AI_PROVIDER=anthropic`, `ANTHROPIC_API_KEY`, and both `AI_BUDGET_*` variables.
+
+Notes:
+- The blueprint uses Render's `free` plans. Render limits those: a free web service sleeps when idle, and free databases are limited or temporary ⚠️. Switch to paid plans for real use.
+- The blueprint follows Render's published examples, but **has not been deployed yet**. If Render reports an error, tell me the message.
 
 ### C. Your own server (VPS)
 
@@ -76,6 +82,20 @@ Caveats (⚠️ reported, not verified):
 2. Use PostgreSQL. `pglite:/var/lib/academy` works for a small single-server setup with backups, but isn't recommended for many users.
 
 HTTPS is required in production: the session cookie is `Secure`. `INSECURE_COOKIES=true` exists only for testing over plain HTTP on a local network.
+
+### D. Testing on iPhone/iPad at home (local HTTPS)
+
+`npm run start:https` builds the app and serves it at `https://<computer-address>:3443`, using a certificate from a private certificate authority created on first start in `.certs/`.
+- A plain-HTTP setup page on port 3080 (with a QR code in the terminal) lets the device install and trust that authority once. After that, Safari treats the app as a normal secure site.
+- The authority is limited by X.509 name constraints to private network addresses (10/8, 172.16/12, 192.168/16, 127/8, 169.254/16) and local names. Certificates it signs for any other site are rejected.
+- The server certificate is renewed automatically when the computer's address changes, and lasts 397 days, as Apple requires.
+- Ports can be changed with `HTTPS_PORT` and `SETUP_PORT`.
+- `APP_SECRET` is generated and kept in `.data/app-secret` unless you set one.
+- Push keys (VAPID) are generated and kept in `.data/vapid.json` unless you set them.
+- The server runs the reminder job itself every 15 minutes, so no external scheduler is needed at home.
+- Apple's push service may reject the placeholder `VAPID_SUBJECT`; if it does, set it to `mailto:` plus your own address.
+
+Verified here: certificates validated by OpenSSL and Node.js; HTTPS requests with full certificate checking; a secure context with the service worker active in Chromium. **Not verified on a physical iPhone or iPad.**
 
 ## 5. Reminder job (cron)
 
