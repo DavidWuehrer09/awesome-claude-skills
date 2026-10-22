@@ -5,19 +5,21 @@ import { useState } from "react";
 import { MODE_INFO, MODES, type AssessmentMode } from "@/lib/curriculum";
 import { REVISION_DEPTHS, type RevisionDepth } from "@/lib/ai/depths";
 import { api, errorMessage } from "@/lib/client/api";
+import { aimFor15 } from "@/lib/client/aimFor15";
 import { Button, Card, CardTitle, ErrorNotice, Field, Input, LoadingNotice, Select, Textarea } from "@/components/ui";
 
 const DEPTH_LABEL: Record<RevisionDepth, string> = {
   corrections: "Corrections only — fix real errors",
   targeted: "Targeted — errors + top priorities",
-  exemplary: "Exemplary — what 13–15 could look like",
+  exemplary: "Aim for 15 — full 15-point upgrade",
 };
 
 export function EssayActions({ essayId, defaultMode }: { essayId: string; defaultMode: AssessmentMode }) {
   const router = useRouter();
   const [mode, setMode] = useState<AssessmentMode>(defaultMode);
   const [depth, setDepth] = useState<RevisionDepth>("targeted");
-  const [busy, setBusy] = useState<null | "assess" | "revise" | "delete">(null);
+  const [busy, setBusy] = useState<null | "assess" | "revise" | "delete" | "aim">(null);
+  const [aimStep, setAimStep] = useState<"assessing" | "revising">("assessing");
   const [error, setError] = useState<string | null>(null);
 
   const run = async (kind: "assess" | "revise") => {
@@ -33,6 +35,15 @@ export function EssayActions({ essayId, defaultMode }: { essayId: string; defaul
     <Card>
       <CardTitle>Next steps</CardTitle>
       <div className="space-y-4">
+        <div className="rounded-lg border border-accent/30 bg-accent-soft p-3">
+          <p className="text-sm font-medium text-ink">Aim for 15</p>
+          <p className="mt-1 text-xs leading-relaxed text-ink-2">Strict assessment, then your essay rewritten as a 15-point version — with phrase upgrades and concrete ideas for what to improve yourself.</p>
+          <Button className="mt-2" size="sm" loading={busy === "aim"} disabled={busy !== null} onClick={async () => {
+            setBusy("aim"); setError(null);
+            try { const id = await aimFor15(essayId, setAimStep); router.push(`/revision/${id}`); }
+            catch (err) { setError(errorMessage(err)); setBusy(null); router.refresh(); }
+          }}>Aim for 15</Button>
+        </div>
         <div className="flex flex-wrap items-end gap-2">
           <Field label="Assess (again) in mode" htmlFor="mode">
             <Select id="mode" value={mode} onChange={(e) => setMode(e.target.value as AssessmentMode)} className="w-48">
@@ -50,6 +61,7 @@ export function EssayActions({ essayId, defaultMode }: { essayId: string; defaul
           <Button variant="secondary" onClick={() => run("revise")} loading={busy === "revise"} disabled={busy !== null}>Open in Revision Studio</Button>
         </div>
         {busy === "assess" && <LoadingNotice title="Assessing…" detail="Usually 30–120 seconds." />}
+        {busy === "aim" && <LoadingNotice title={aimStep === "assessing" ? "Step 1 of 2: strict assessment…" : "Step 2 of 2: writing your 15-point version…"} detail="This takes about 1–4 minutes in total. Your essay is saved." />}
         {busy === "revise" && <LoadingNotice title="Preparing your revision…" detail="Usually 30–120 seconds." />}
         {error && <ErrorNotice message={error} />}
         <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-line pt-3 text-sm">

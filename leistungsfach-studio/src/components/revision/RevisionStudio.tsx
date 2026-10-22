@@ -5,6 +5,7 @@ import { CATEGORY_INFO, type DocItem, type EditState, type RevisionDocument } fr
 import type { DiffOp } from "@/lib/text/diff";
 import { api, errorMessage } from "@/lib/client/api";
 import { Badge, Button, Card, CardTitle, cx, ErrorNotice, Field, LoadingNotice, Notice, Textarea } from "@/components/ui";
+import { CoachingPanel, type Coaching } from "./CoachingPanel";
 
 type View = "changes" | "side" | "final" | "original";
 type Explanation = { id: string; editId: string; question: string; result: ExplanationOutput; createdAt: string };
@@ -43,7 +44,7 @@ function stateBadge(s: EditState) {
   return null;
 }
 
-export function RevisionStudio({ revisionId, initialDoc, overview, initialExplanations }: { revisionId: string; initialDoc: RevisionDocument; overview: string; initialExplanations: Explanation[] }) {
+export function RevisionStudio({ revisionId, initialDoc, overview, initialExplanations, coaching }: { revisionId: string; initialDoc: RevisionDocument; overview: string; initialExplanations: Explanation[]; coaching?: Coaching | null }) {
   const [doc, setDoc] = useState(initialDoc);
   const [view, setView] = useState<View>("changes");
   const [selected, setSelected] = useState<string | null>(initialDoc.editOrder[0] ?? null);
@@ -180,6 +181,7 @@ export function RevisionStudio({ revisionId, initialDoc, overview, initialExplan
           </Card>
         )}
         {view === "original" && <Card><div className="prose-essay text-ink">{doc.originalText.split("\n\n").map((p, i) => <p key={i}>{p}</p>)}</div></Card>}
+        {coaching && <CoachingPanel coaching={coaching} revisionId={revisionId} />}
         <p className="text-xs text-muted">Keyboard: <kbd>←</kbd>/<kbd>→</kbd> or <kbd>j</kbd>/<kbd>k</kbd> move between changes · <kbd>a</kbd> accept · <kbd>r</kbd> keep original.</p>
       </div>
 

@@ -62,6 +62,18 @@ test("revision studio: colour legend, keyboard navigation, keep original, final 
   await expect(page.getByText("Mock explanation of the change.")).toBeVisible();
 });
 
+test("aim for 15: one click gives a 15-point version, ideas and savable phrase upgrades", async ({ page }) => {
+  await page.goto("/essays");
+  await page.getByRole("link", { name: "Youth centre – analysis" }).click();
+  await page.getByRole("button", { name: "Aim for 15" }).click();
+  await page.waitForURL(/\/revision\/[0-9a-f-]+/);
+  await expect(page.getByText("15-point version")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ideas to reach 15 — do these yourself" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Phrase upgrades" })).toBeVisible();
+  await page.getByRole("button", { name: "Save to vocabulary" }).first().click();
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+});
+
 test("training: priorities, hidden model answer, attempt, feedback and reveal", async ({ page }) => {
   await page.goto("/training");
   await expect(page.getByRole("heading", { name: "Your three most valuable priorities" })).toBeVisible();

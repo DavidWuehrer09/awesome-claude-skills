@@ -55,6 +55,18 @@ export const RevisionOutputSchema = z.object({
     is_new_idea: z.boolean().describe("True if the revision adds content the student did not write."),
     needs_evidence_note: z.string().nullable().describe("For new ideas: what textual evidence would justify it."),
   })),
+  phrase_upgrades: z.array(z.object({
+    original: z.string().describe("Verbatim phrase from the student's essay"),
+    upgraded: z.string().describe("A more precise, sophisticated but natural alternative"),
+    why: z.string().describe("Why the upgrade is better here"),
+    when_to_use: z.string().describe("When the student can reuse it (and when not)"),
+  })).describe("Reusable phrase-level upgrades. Empty for depth 'corrections'."),
+  ideas_for_15: z.array(z.object({
+    idea: z.string().describe("A concrete improvement the student should make themselves"),
+    why_it_raises_the_mark: z.string(),
+    where: z.string().describe("Which paragraph or part of the essay"),
+    needs_evidence: z.string().nullable().describe("Textual evidence needed, if the idea adds content"),
+  })).describe("What would lift the essay towards 15 points. Empty for depth 'corrections'."),
 });
 export type RevisionOutput = z.infer<typeof RevisionOutputSchema>;
 

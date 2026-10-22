@@ -94,6 +94,18 @@ describe("end-to-end service workflow (mock AI, real database)", () => {
     expect(edit).toBeDefined();
   });
 
+  it("aim for 15: strict assessment plus a full upgrade with phrase upgrades and ideas", async () => {
+    const essay = await createEssay({ ...ESSAY_INPUT, title: "Aim for 15" });
+    await assessEssay(essay.id, "strict");
+    const rev = await createRevision(essay.id, "exemplary");
+    const coaching = rev.coaching as { phrase_upgrades: { original: string }[]; ideas_for_15: unknown[] };
+    expect(coaching.ideas_for_15.length).toBeGreaterThanOrEqual(3);
+    expect(coaching.phrase_upgrades.length).toBeGreaterThanOrEqual(3);
+    for (const u of coaching.phrase_upgrades) expect(ESSAY_INPUT.essayText).toContain(u.original);
+    const corrections = await createRevision(essay.id, "corrections");
+    expect((corrections.coaching as { ideas_for_15: unknown[] }).ideas_for_15).toHaveLength(0);
+  });
+
   it("hides model answers until an attempt, evaluates it and records exercise evidence", async () => {
     const ex = await generateExercise({ skillKey: "analytical_depth" });
     expect(ex.content.model_answer).toBeNull();

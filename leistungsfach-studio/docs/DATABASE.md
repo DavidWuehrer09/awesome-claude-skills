@@ -12,7 +12,7 @@ All ids are UUID strings. Timestamps are `timestamptz`. Rows are only soft-delet
 | `learner_profile` | Single row (`id = 'me'`): name, year, default mode, `use_reported_weighting` (40/60 rule on/off), goals | |
 | `essays` | Submitted work. **Immutable**: a revised essay is a new row with `parent_essay_id` | `task_type`, `operator`, `task_prompt`, `source_text`, `essay_text`, `rubric_text`, `context` (practice, homework, classwork, exam_simulation), `time_limit_minutes`, `time_used_minutes` |
 | `assessments` | One row per assessment run, including **failed** runs (`status`, `error_code`, `error_message`) | `mode`, `score_low/best/high`, `content_score`, `language_score`, `confidence`, `aggregation` (method, notes, cap), `result` (validated AI output), `calibration`, `provider`, `model`, `prompt_version` |
-| `revisions` | Revision runs | `depth`, `sentences` (segmentation snapshot), `edits` (validated), `edit_states` (accepted/rejected per edit), `overview` |
+| `revisions` | Revision runs | `depth`, `sentences` (segmentation snapshot), `edits` (validated), `edit_states` (accepted/rejected per edit), `overview`, `coaching` (phrase upgrades and ideas for 15) |
 | `revision_explanations` | "Explain this change" results | `revision_id`, `edit_id`, `question`, `result` |
 | `skill_states` | Computed per skill (recomputed deterministically, never edited by hand) | `level`, `confidence`, `trend`, `mastery_status`, `evidence_count`, `source_count`, `recommended_action` |
 | `skill_evidence` | Observations from the student's own work | `skill_key`, `source_type` (assessment, exercise, teacher, manual_note), `submission_key` (groups one piece of work), `polarity`, `level_estimate`, `quote`, `note`, `is_transfer`, `dismissed_at/_reason` |

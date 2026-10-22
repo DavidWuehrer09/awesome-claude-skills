@@ -5,7 +5,7 @@ import { REVISION_DEPTHS, type RevisionDepth } from "@/lib/ai/depths";
 import { api, errorMessage } from "@/lib/client/api";
 import { Button, Card, CardTitle, ErrorNotice, Field, LoadingNotice, Select } from "@/components/ui";
 
-const LABEL: Record<RevisionDepth, string> = { corrections: "Corrections only", targeted: "Targeted (recommended)", exemplary: "Exemplary (13–15 model)" };
+const LABEL: Record<RevisionDepth, string> = { corrections: "Corrections only", targeted: "Targeted (recommended)", exemplary: "Aim for 15 — full 15-point upgrade" };
 
 export function StartRevision({ essays }: { essays: { id: string; title: string; assessed: boolean }[] }) {
   const router = useRouter();

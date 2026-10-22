@@ -91,7 +91,7 @@ describe("revision validation and document", () => {
   const sentences = segmentEssay(ESSAY_TEXT);
   const edit = (o: Partial<StoredEdit>): StoredEdit => ({ id: "e1", target_ids: ["p2s1"], revised_text: "The author quotes the mayor to expose the council's narrow, purely financial reasoning.", category: "deeper_analysis", explanation: "x", principle: "p", how_to_apply: "h", is_new_idea: false, needs_evidence_note: null, ...o });
   it("accepts valid edits", () => {
-    expect(validateRevision({ overview: "o", edits: [edit({})] }, { sentences, sourceText: SOURCE_TEXT, essayText: ESSAY_TEXT })).toEqual([]);
+    expect(validateRevision({ overview: "o", edits: [edit({})], phrase_upgrades: [], ideas_for_15: [] }, { sentences, sourceText: SOURCE_TEXT, essayText: ESSAY_TEXT })).toEqual([]);
   });
   it("rejects unknown ids, reused ids, cross-paragraph ranges, no-op edits and invented quotes", () => {
     const p = validateRevision({ overview: "o", edits: [
@@ -100,12 +100,27 @@ describe("revision validation and document", () => {
       edit({ target_ids: ["p3s1"], revised_text: sentences.find((s) => s.id === "p3s1")!.text }),
       edit({ target_ids: ["p2s2"], revised_text: 'He calls it "a moral disaster".' }),
       edit({ target_ids: ["p2s2"], revised_text: "Changed." }),
-    ] }, { sentences, sourceText: SOURCE_TEXT, essayText: ESSAY_TEXT }).join(" | ");
+    ], phrase_upgrades: [], ideas_for_15: [] }, { sentences, sourceText: SOURCE_TEXT, essayText: ESSAY_TEXT }).join(" | ");
     expect(p).toMatch(/unknown sentence id/);
     expect(p).toMatch(/same paragraph/);
     expect(p).toMatch(/identical to the original/);
     expect(p).toMatch(/do not appear in the source text/);
     expect(p).toMatch(/already used/);
+  });
+  it("aim-for-15 depth requires ideas and verbatim phrase upgrades", () => {
+    const base = { overview: "o", edits: [edit({})] };
+    const missing = validateRevision({ ...base, phrase_upgrades: [], ideas_for_15: [] }, { sentences, sourceText: SOURCE_TEXT, essayText: ESSAY_TEXT, depth: "exemplary" }).join(" ");
+    expect(missing).toMatch(/ideas_for_15 needs at least 3/);
+    expect(missing).toMatch(/phrase_upgrades needs at least 3/);
+    const idea = { idea: "i", why_it_raises_the_mark: "w", where: "intro", needs_evidence: null };
+    const invented = validateRevision({ ...base, ideas_for_15: [idea, idea, idea], phrase_upgrades: [
+      { original: "makes the reader think about", upgraded: "prompts readers to reconsider", why: "w", when_to_use: "u" },
+      { original: "a phrase the student never wrote", upgraded: "x", why: "w", when_to_use: "u" },
+      { original: "to show his opinion", upgraded: "to show his opinion", why: "w", when_to_use: "u" },
+    ] }, { sentences, sourceText: SOURCE_TEXT, essayText: ESSAY_TEXT, depth: "exemplary" }).join(" ");
+    expect(invented).toMatch(/not verbatim in the essay/);
+    expect(invented).toMatch(/identical to the original/);
+    expect(invented).not.toMatch(/makes the reader think/);
   });
   it("builds final text honouring rejected edits and keeps unchanged sentences verbatim", () => {
     const doc = buildRevisionDocument(sentences, [edit({})], { e1: "rejected" });

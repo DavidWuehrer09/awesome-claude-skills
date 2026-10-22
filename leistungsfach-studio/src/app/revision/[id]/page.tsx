@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RevisionStudio } from "@/components/revision/RevisionStudio";
+import type { Coaching } from "@/components/revision/CoachingPanel";
 import { Badge, ErrorNotice, formatDate, MockBadge, PageHeader } from "@/components/ui";
 import type { ExplanationOutput } from "@/lib/ai/schemas";
 import { getRevisionView } from "@/server/services/revision";
@@ -17,13 +18,14 @@ export default async function RevisionPage({ params }: { params: Promise<{ id: s
     <>
       <PageHeader
         title="Revision Studio"
-        intro={<span className="flex flex-wrap items-center gap-2"><Link className="text-accent underline" href={`/essays/${essay.id}`}>{essay.title}</Link><Badge>{revision.depth} revision</Badge><MockBadge provider={revision.provider} /><span>{formatDate(revision.createdAt)}</span></span>}
+        intro={<span className="flex flex-wrap items-center gap-2"><Link className="text-accent underline" href={`/essays/${essay.id}`}>{essay.title}</Link>{revision.depth === "exemplary" ? <Badge tone="accent">15-point version</Badge> : <Badge>{revision.depth} revision</Badge>}<MockBadge provider={revision.provider} /><span>{formatDate(revision.createdAt)}</span></span>}
       />
       {!doc ? <ErrorNotice title="This revision failed" message={revision.errorMessage ?? "Unknown error"} /> : (
         <RevisionStudio
           revisionId={id}
           initialDoc={doc}
           overview={revision.overview ?? ""}
+          coaching={(revision.coaching as Coaching | null) ?? null}
           initialExplanations={explanations.map((e) => ({ id: e.id, editId: e.editId, question: e.question, result: e.result as ExplanationOutput, createdAt: e.createdAt.toISOString() }))}
         />
       )}

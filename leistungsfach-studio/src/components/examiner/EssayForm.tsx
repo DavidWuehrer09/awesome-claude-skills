@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { MODE_INFO, MODES, TASK_TYPES, TASK_TYPE_KEYS, type AssessmentMode, type TaskTypeKey } from "@/lib/curriculum";
 import { wordCount } from "@/lib/text/normalize";
 import { api, ApiError, errorMessage } from "@/lib/client/api";
+import { aimFor15 } from "@/lib/client/aimFor15";
 import { Badge, Button, Card, CardTitle, cx, ErrorNotice, Field, Input, LoadingNotice, Notice, ProvenanceBadge, Select, Textarea } from "@/components/ui";
 
 const DRAFT_KEY = "studio.examiner.draft.v1";
@@ -37,7 +38,7 @@ export function EssayForm({ defaultMode, parent }: { defaultMode: AssessmentMode
   );
   const [mode, setMode] = useState<AssessmentMode>(defaultMode);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [phase, setPhase] = useState<"idle" | "saving" | "assessing">("idle");
+  const [phase, setPhase] = useState<"idle" | "saving" | "assessing" | "revising">("idle");
   const [failure, setFailure] = useState<{ message: string; essayId?: string } | null>(null);
   const [draftDismissed, setDraftDismissed] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -74,7 +75,7 @@ export function EssayForm({ defaultMode, parent }: { defaultMode: AssessmentMode
     t.needsSourceText && !d.sourceText.trim() && "This task type normally needs the source text: without it, the examiner cannot check your understanding or quotations.",
   ].filter(Boolean) as string[];
 
-  async function submit(assess: boolean) {
+  async function submit(assess: boolean | "aim15") {
     setFailure(null); setErrors({});
     const timeUsed = d.context === "exam_simulation" && timerStart ? Math.round(elapsedMin) : d.timeUsedMinutes ? Number(d.timeUsedMinutes) : null;
     const body = {
@@ -98,6 +99,16 @@ export function EssayForm({ defaultMode, parent }: { defaultMode: AssessmentMode
       return;
     }
     if (!assess) { router.push(`/essays/${essayId}`); return; }
+    if (assess === "aim15") {
+      try {
+        const revId = await aimFor15(essayId, (step) => setPhase(step));
+        router.push(`/revision/${revId}`);
+      } catch (err) {
+        setPhase("idle");
+        setFailure({ message: `Your essay was saved, but “Aim for 15” did not finish: ${errorMessage(err)}`, essayId });
+      }
+      return;
+    }
     setPhase("assessing");
     try {
       await api(`/api/essays/${essayId}/assess`, { body: { mode } });
@@ -216,6 +227,7 @@ export function EssayForm({ defaultMode, parent }: { defaultMode: AssessmentMode
         <div id="form-status" className="space-y-3">
           {phase === "saving" && <LoadingNotice title="Saving your essay…" />}
           {phase === "assessing" && <LoadingNotice title="Assessing…" detail="A careful assessment usually takes 30–120 seconds. Your essay is already saved." />}
+          {phase === "revising" && <LoadingNotice title="Writing your 15-point version…" detail="Step 2 of 2 — usually 1–2 minutes. Your essay and assessment are already saved." />}
           {failure && (
             <ErrorNotice
               title="Not finished"
@@ -226,9 +238,10 @@ export function EssayForm({ defaultMode, parent }: { defaultMode: AssessmentMode
         </div>
         <div className="flex flex-col gap-2">
           <Button type="submit" loading={phase === "assessing"} disabled={busy}>Save and assess</Button>
-          <Button type="button" variant="secondary" disabled={busy} onClick={() => submit(false)}>Save without assessing</Button>
+          <Button type="button" variant="secondary" disabled={busy} onClick={() => submit("aim15")}>Save and aim for 15</Button>
+          <Button type="button" variant="ghost" disabled={busy} onClick={() => submit(false)}>Save without assessing</Button>
         </div>
-        <p className="text-xs leading-relaxed text-muted">The score is an indicative estimate with a range — not an official grade and not a prediction of your teacher&apos;s mark.</p>
+        <p className="text-xs leading-relaxed text-muted"><strong>Aim for 15</strong> runs a strict assessment, then rewrites your essay as a 15-point version with phrase upgrades and ideas to improve. The score is an indicative estimate with a range — not an official grade and not a prediction of your teacher&apos;s mark.</p>
       </aside>
     </form>
   );

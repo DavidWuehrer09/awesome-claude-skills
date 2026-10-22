@@ -64,7 +64,18 @@ function revision(ctx: Ctx) {
   if (sentences[0]) edits.push({ target_ids: [sentences[0].id], revised_text: sentences[0].text.replace(/[.!?]?$/, ", which frames the whole argument."), category: "precision", explanation: "Mock: the claim is made more specific.", principle: "Say precisely what something does.", how_to_apply: "Ask: what exactly does this show?", is_new_idea: false, needs_evidence_note: null });
   if (sentences[1]) edits.push({ target_ids: [sentences[1].id], revised_text: `Moreover, ${sentences[1].text.charAt(0).toLowerCase()}${sentences[1].text.slice(1)}`, category: "structure_cohesion", explanation: "Mock: a connector links the ideas.", principle: "Signal the logical relation between sentences.", how_to_apply: "Check each paragraph's transitions.", is_new_idea: false, needs_evidence_note: null });
   if (sentences[2]) edits.push({ target_ids: [sentences[2].id], revised_text: `${sentences[2].text} This suggests a wider concern about society.`, category: "deeper_analysis", explanation: "Mock: adds an interpretation.", principle: "Link observations to significance.", how_to_apply: "End analytical points with 'This suggests…'.", is_new_idea: true, needs_evidence_note: "Only valid if the source text supports a social reading." });
-  return { overview: "Mock revision focusing on precision, cohesion and depth.", edits };
+  const deep = ctx.depth !== "corrections";
+  const phrase_upgrades = deep && sentences[0] ? [
+    { original: sentences[0].text.split(" ").slice(0, 4).join(" "), upgraded: "Mock upgraded phrase", why: "Mock: more precise.", when_to_use: "Mock: in analytical openings." },
+    ...(sentences[1] ? [{ original: sentences[1].text.split(" ").slice(0, 3).join(" "), upgraded: "Mock second upgrade", why: "Mock: more idiomatic.", when_to_use: "Mock: in body paragraphs." }] : []),
+    ...(sentences[2] ? [{ original: sentences[2].text.split(" ").slice(0, 3).join(" "), upgraded: "Mock third upgrade", why: "Mock: stronger verb.", when_to_use: "Mock: when explaining effects." }] : []),
+  ] : [];
+  const ideas_for_15 = deep ? [
+    { idea: "Mock: state a precise thesis in the introduction.", why_it_raises_the_mark: "Mock: structure and focus.", where: "Introduction", needs_evidence: null },
+    { idea: "Mock: explain the effect of each device on the intended reader.", why_it_raises_the_mark: "Mock: analytical depth.", where: "Body paragraphs", needs_evidence: null },
+    { idea: "Mock: weigh the effectiveness of the strategies in the conclusion.", why_it_raises_the_mark: "Mock: independence and nuance.", where: "Conclusion", needs_evidence: null },
+  ] : [];
+  return { overview: "Mock revision focusing on precision, cohesion and depth.", edits, phrase_upgrades, ideas_for_15 };
 }
 
 function learnerUpdate(ctx: Ctx) {

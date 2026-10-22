@@ -20,6 +20,15 @@ essay text ──segmentSentences()──► [{id:"p1s1", text}, …]   src/lib/
 
 Unchanged sentences are **not** sent back by the model; the code reuses the original text verbatim, so "retained" is guaranteed to be truly retained.
 
+## "Aim for 15" (depth `exemplary`)
+
+The student's explicit request: a full upgrade to the strongest 15-point version, plus guidance to get there independently.
+- One click (essay page or Examiner, `src/lib/client/aimFor15.ts`): strict assessment → `exemplary` revision → Revision Studio.
+- The prompt may revise every sentence that is not already at 15-point level, but must keep the student's core ideas, mark added ideas `is_new_idea`, and stay natural (never ornate, archaic or showy).
+- `phrase_upgrades` (original verbatim from the essay → upgraded, why, when_to_use) and `ideas_for_15` (concrete actions ordered by impact, where, evidence needed) are stored in `revisions.coaching` and shown by `src/components/revision/CoachingPanel.tsx`. The validator requires ≥ 3 ideas, and ≥ 3 phrase upgrades for essays of ≥ 4 sentences; both are empty for `corrections`.
+- Saving a phrase upgrade puts it in the vocabulary bank. It counts as learned only after the student uses it correctly in an original sentence.
+- Never promise the rewrite would score 15. It is the target, and the strict assessment shows the distance.
+
 ## Colour and label contract (accessibility)
 
 | Op | Colour token | Label (always rendered, not colour-only) |
@@ -37,7 +46,7 @@ Modified = an adjacent removed+added word run inside an edited sentence (diff.ts
 
 ## Constraints
 
-- **Preserve voice and meaning.** Prompt instructs minimal intervention by depth level: `corrections` (errors only), `targeted` (errors + the assessment's top priorities), `exemplary` (what a 13–15 version of *this* essay could look like).
+- **Preserve voice and meaning.** Prompt instructs minimal intervention by depth level: `corrections` (errors only), `targeted` (errors + the assessment's top priorities), `exemplary` ("Aim for 15": the strongest 15-point version of *this* essay, see below).
 - An edit that introduces content the student did not write sets `is_new_idea: true` and must say what evidence from the source would justify it. UI shows a "new idea — needs justification" marker.
 - Never put quotation marks around words that are not in the source text or essay (validator checks quoted strings).
 - Accepting a revision is **not** learning evidence (learner-modelling Skill). The UI may offer "try it yourself" exercises instead.

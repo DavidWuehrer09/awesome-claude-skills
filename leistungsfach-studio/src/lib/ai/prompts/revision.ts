@@ -13,7 +13,7 @@ export { REVISION_DEPTHS, type RevisionDepth };
 const DEPTH_RULES: Record<RevisionDepth, string> = {
   corrections: "Fix genuine errors only (grammar, wrong word, unidiomatic collocation, register slips). Keep wording, structure and ideas otherwise unchanged. Do not touch correct sentences.",
   targeted: "Fix genuine errors, and improve the passages most relevant to the assessment's top priorities (listed below). Leave sentences that already work unchanged. Typically 25–50 % of sentences change.",
-  exemplary: "Show what a 13–15-point version of THIS essay could look like: keep the student's structure, ideas and voice where they work; deepen analysis, sharpen argument and language where they do not. Every added idea must be marked is_new_idea with the evidence it needs. Still leave strong sentences unchanged.",
+  exemplary: "AIM FOR 15: rewrite THIS essay into the strongest version a top eA candidate could write for this task — the benchmark is 15 points (1+), the student explicitly asked for a full upgrade. You may revise every sentence that is not already at 15-point level (leave genuinely excellent sentences unchanged). Requirements: a clear structure (introduction with a precise thesis, topic sentences, logical progression, a conclusion that weighs rather than repeats); for analysis, the full effect chain with integrated, line-referenced evidence; for argument, developed reasoning and a rebuttal. Language must be sophisticated yet natural, precise, idiomatic and controlled — never ornate, archaic or showy. Keep the student's core ideas and line of thought where they work; mark every added idea is_new_idea with the evidence it needs. Only claims the source text supports.",
 };
 
 export const REVISION_SYSTEM = `${SHARED_RULES}
@@ -35,6 +35,8 @@ You are the revision coach. You receive the student's essay split into numbered 
 - Preserve the student's meaning and voice. Do not make language more ornate than needed; natural precision is the goal.
 - Only put words in quotation marks if they appear verbatim in the source text or essay.
 - overview: 2–4 sentences on the focus of the revision and what was deliberately kept.
+- phrase_upgrades (depths targeted/exemplary; [] for corrections): 4–10 reusable upgrades of phrases the student actually wrote (original copied verbatim from the essay) → a more precise, sophisticated but natural alternative, with why and when_to_use (including when it would be too much). Prefer analytical verbs, precise collocations and cohesive devices over rare words.
+- ideas_for_15 (depths targeted/exemplary; [] for corrections): 3–6 concrete things the student should do themselves to move towards 15, ordered by impact, each with why_it_raises_the_mark and where. These are for the student's own writing, not a summary of your edits.
 </revision_rules>`;
 
 export function buildRevisionPrompt(input: {
@@ -60,7 +62,7 @@ ${escapeBlock(renderNumberedSentences(input.sentences))}
   return { system: REVISION_SYSTEM, user };
 }
 
-export function validateRevision(out: RevisionOutput, input: { sentences: Sentence[]; sourceText: string; essayText: string }): string[] {
+export function validateRevision(out: RevisionOutput, input: { sentences: Sentence[]; sourceText: string; essayText: string; depth?: RevisionDepth }): string[] {
   const problems: string[] = [];
   const order = new Map(input.sentences.map((s, i) => [s.id, i]));
   const byId = new Map(input.sentences.map((s) => [s.id, s]));
@@ -89,6 +91,14 @@ export function validateRevision(out: RevisionOutput, input: { sentences: Senten
     }
     if (e.is_new_idea && !e.needs_evidence_note) problems.push(`${label}: a new idea needs needs_evidence_note.`);
   });
+  out.phrase_upgrades.forEach((u, n) => {
+    if (!containsQuote(input.essayText, u.original)) problems.push(`phrase_upgrades ${n + 1}: original "${u.original.slice(0, 60)}" is not verbatim in the essay.`);
+    if (normalizeForMatch(u.original) === normalizeForMatch(u.upgraded)) problems.push(`phrase_upgrades ${n + 1}: upgraded is identical to the original.`);
+  });
+  if (input.depth && input.depth !== "corrections") {
+    if (out.ideas_for_15.length < 3) problems.push("ideas_for_15 needs at least 3 concrete ideas for this depth.");
+    if (out.phrase_upgrades.length < 3 && input.sentences.length >= 4) problems.push("phrase_upgrades needs at least 3 upgrades for this depth.");
+  }
   return problems;
 }
 

@@ -33,12 +33,13 @@ export async function createRevision(essayId: string, depth: RevisionDepth) {
   try {
     const { data, provider, model } = await runAI({
       operation: "revision", system, user, schema: RevisionOutputSchema, effort: depth === "corrections" ? "medium" : "high", maxTokens: 32000, relatedId: essayId,
-      validate: (o) => validateRevision(o, { sentences, sourceText: essay.sourceText, essayText: essay.essayText }),
-      mockContext: { sentences },
+      validate: (o) => validateRevision(o, { sentences, sourceText: essay.sourceText, essayText: essay.essayText, depth }),
+      mockContext: { sentences, depth },
     });
     const edits: StoredEdit[] = data.edits.map((e, i) => ({ id: `e${i + 1}`, ...e }));
     const [row] = await db.insert(schema.revisions).values({
       essayId, assessmentId: assessment?.id ?? null, depth, status: "completed", sentences, edits, editStates: {}, overview: data.overview,
+      coaching: { phrase_upgrades: data.phrase_upgrades, ideas_for_15: data.ideas_for_15 },
       provider, model, promptVersion: REVISION_PROMPT_VERSION,
     }).returning();
     return row;

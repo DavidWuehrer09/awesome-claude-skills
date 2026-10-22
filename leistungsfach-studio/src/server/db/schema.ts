@@ -67,6 +67,7 @@ export const revisions = pgTable("revisions", {
   edits: jsonb("edits"), // validated RevisionEdit[]
   editStates: jsonb("edit_states").notNull().default({}), // { [editId]: "accepted" | "rejected" }
   overview: text("overview"),
+  coaching: jsonb("coaching"), // { phrase_upgrades, ideas_for_15 }
   provider: text("provider"),
   model: text("model"),
   promptVersion: text("prompt_version"),
