@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+/* Design tokens — light. Contrast of text tokens on --surface/--paper ≥ 4.5:1 (WCAG AA). */
+:root {
+  --paper: #f7f5f1;
+  --surface: #ffffff;
+  --surface-2: #f1eee8;
+  --ink: #1d1c1a;
+  --ink-2: #45413c;
+  --muted: #645e57;
+  --border: #e3ded6;
+  --border-strong: #cbc4b9;
+  --accent: #2a4a7a;
+  --accent-ink: #ffffff;
+  --accent-soft: #e6ecf5;
+  --focus: #2a6fdb;
+  --good: #1f6b3a;
+  --good-soft: #e3f2e7;
+  --warn: #7a5300;
+  --warn-soft: #fbf0d0;
+  --bad: #9b2a22;
+  --bad-soft: #fbe5e2;
+
+  /* Revision diff colours (always paired with text labels) */
+  --diff-retained-bg: #e4f3e8; --diff-retained-ink: #18522b; --diff-retained-line: #3f9a5c;
+  --diff-modified-bg: #fcefc4; --diff-modified-ink: #5e4300; --diff-modified-line: #c99a12;
+  --diff-added-bg: #dde9fb;    --diff-added-ink: #16407e;    --diff-added-line: #3b73c9;
+  --diff-removed-bg: #fbe1de;  --diff-removed-ink: #84201a;  --diff-removed-line: #cf4a3f;
+
+  /* Chart series (validated: dataviz validate_palette, light vs #ffffff, dark vs #1b1d20) */
+  --series-1: #2a78d6;
+  --series-1-band: rgba(42, 120, 214, 0.28);
+  --grid: #ece8e1;
+
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #131416;
+    --surface: #1b1d20;
+    --surface-2: #23262a;
+    --ink: #ecebe7;
+    --ink-2: #cfccc6;
+    --muted: #a39f98;
+    --border: #2f3237;
+    --border-strong: #454a51;
+    --accent: #8fb2ea;
+    --accent-ink: #0d1726;
+    --accent-soft: #1f2b3d;
+    --focus: #8fb2ea;
+    --good: #7fd19b;
+    --good-soft: #17301f;
+    --warn: #f0c96a;
+    --warn-soft: #362b10;
+    --bad: #f19a90;
+    --bad-soft: #3a1b18;
+
+    --diff-retained-bg: #163020; --diff-retained-ink: #a7e3b8; --diff-retained-line: #4fb070;
+    --diff-modified-bg: #3a2f0e; --diff-modified-ink: #f3d98a; --diff-modified-line: #d1a62a;
+    --diff-added-bg: #162a47;    --diff-added-ink: #b5cff7;    --diff-added-line: #5b8fdc;
+    --series-1: #3987e5;
+    --series-1-band: rgba(57, 135, 229, 0.32);
+    --grid: #2a2d31;
+    --diff-removed-bg: #3d1a17;  --diff-removed-ink: #f4b2a9;  --diff-removed-line: #d8665b;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+html { color-scheme: light dark; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+.prose-essay { font-family: var(--font-serif); font-size: 1.075rem; line-height: 1.75; }
+.prose-essay p + p { margin-top: 0.9em; }
+
+/* Diff marks */
+.diff-retained { background: var(--diff-retained-bg); color: var(--diff-retained-ink); border-bottom: 2px solid var(--diff-retained-line); }
+.diff-modified { background: var(--diff-modified-bg); color: var(--diff-modified-ink); border-bottom: 2px dashed var(--diff-modified-line); }
+.diff-added    { background: var(--diff-added-bg); color: var(--diff-added-ink); border-bottom: 2px solid var(--diff-added-line); text-decoration: none; }
+.diff-removed  { background: var(--diff-removed-bg); color: var(--diff-removed-ink); text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.diff-mark { border-radius: 3px; padding: 0 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+
+.sr-only-focusable:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
